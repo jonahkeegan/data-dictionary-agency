@@ -1,0 +1,255 @@
+timestamp: 2025-04-24T21:10:00-07:00
+components:
+  #FD_CORE: &{
+    name: FormatDetectionEngine,
+    ^critical,
+    path: src/formats/detector.py,
+    responsibilities: [
+      "Detect file formats",
+      "Coordinate parser plugins",
+      "Register format parsers",
+      "Execute format detection"
+    ],
+    interfaces: [
+      {method: "detect_format(file_path)", return: "FormatType", description: "Identifies file format"},
+      {method: "register_parser(parser)", return: "None", description: "Registers a format parser plugin"},
+      {method: "get_parser(format_type)", return: "Parser", description: "Returns parser for specific format"}
+    ],
+    pattern: Strategy,
+    dependencies: [
+      {id: "#FD_BASE", type: "uses"}
+    ],
+    decisions: ["#ARCH_002"]
+  }
+  
+  #FD_AVRO: &{
+    name: AvroParser,
+    path: src/format_detection/plugins/avro/__init__.py,
+    responsibilities: [
+      "Parse Avro schema files",
+      "Extract record definitions and fields",
+      "Handle complex Avro types (records, enums, arrays, maps, fixed)",
+      "Support union types and nullable fields",
+      "Process nested record structures",
+      "Identify potential primary keys"
+    ],
+    interfaces: [
+      {method: "can_parse(filename, content)", return: "bool", description: "Checks if content is a valid Avro schema"},
+      {method: "parse_schema(filename, content)", return: "SchemaDetails", description: "Extracts schema from Avro schema content"},
+      {method: "get_format_type()", return: "FormatType.AVRO", description: "Returns format type"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"}
+    ],
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_avro_parser.py", description: "Unit tests for Avro schema parsing"}
+    ]
+  }
+  
+  #FD_BASE: &{
+    name: BaseParser,
+    ^critical,
+    path: src/formats/plugins/base.py,
+    responsibilities: [
+      "Define parser interface",
+      "Provide common parser utilities",
+      "Set parser registration contract"
+    ],
+    interfaces: [
+      {method: "can_parse(file_path)", return: "bool", description: "Checks if file can be parsed by this parser"},
+      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from file"},
+      {method: "get_format_type()", return: "FormatType", description: "Returns format type handled by parser"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#SE_MODELS", type: "uses"}
+    ],
+    decisions: ["#ARCH_002"]
+  }
+  
+  #FD_JSON: &{
+    name: JSONParser,
+    path: src/formats/plugins/json_parser.py,
+    responsibilities: [
+      "Parse JSON files",
+      "Extract JSON schema",
+      "Infer types from JSON data"
+    ],
+    interfaces: [
+      {method: "can_parse(file_path)", return: "bool", description: "Checks if file is valid JSON"},
+      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from JSON file"},
+      {method: "handles_format()", return: "FormatType.JSON", description: "Returns format type"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_TYPE", type: "uses"}
+    ],
+    test_coverage: 0
+  }
+  
+  #FD_CSV: &{
+    name: CSVParser,
+    path: src/formats/plugins/csv_parser.py,
+    responsibilities: [
+      "Parse CSV files",
+      "Detect CSV delimiters",
+      "Extract schema from headers",
+      "Infer column types from data"
+    ],
+    interfaces: [
+      {method: "can_parse(file_path)", return: "bool", description: "Checks if file is valid CSV"},
+      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from CSV file"},
+      {method: "detect_delimiter(file_path)", return: "str", description: "Detects CSV delimiter"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_TYPE", type: "uses"}
+    ],
+    test_coverage: 0
+  }
+  
+  #FD_XML: &{
+    name: XMLParser,
+    path: src/format_detection/plugins/xml/__init__.py,
+    responsibilities: [
+      "Parse XML files",
+      "Process XML schemas (XSD)",
+      "Handle Document Type Definitions (DTD)",
+      "Extract element and attribute definitions",
+      "Detect XML dialects (XHTML, SOAP, SVG, etc.)",
+      "Map XSD/XML types to normalized data types",
+      "Identify primary keys and constraints",
+      "Extract sample data with record detection"
+    ],
+    interfaces: [
+      {method: "can_parse(filename, content)", return: "bool", description: "Checks if content is valid XML/XSD"},
+      {method: "parse_schema(filename, content)", return: "SchemaDetails", description: "Extracts schema from XML/XSD content"},
+      {method: "extract_sample_data(filename, content, max_records)", return: "List[Dict[str, Any]]", description: "Extracts sample records from XML content"},
+      {method: "get_format_type()", return: "FormatType.XML", description: "Returns format type"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"}
+    ],
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_xml_parser.py", description: "Unit tests for XML schema parsing"},
+      {filename: "tests/unit/test_xml_parser_standalone.py", description: "Standalone tests avoiding plugin system"}
+    ]
+  }
+  
+  #FD_YAML: &{
+    name: YAMLParser,
+    path: src/formats/plugins/yaml_parser.py,
+    responsibilities: [
+      "Parse YAML files",
+      "Handle YAML anchors and aliases",
+      "Extract structure definitions"
+    ],
+    interfaces: [
+      {method: "can_parse(file_path)", return: "bool", description: "Checks if file is valid YAML"},
+      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from YAML file"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"}
+    ],
+    test_coverage: 0
+  }
+  
+  #FD_SQL: &{
+    name: SQLParser,
+    path: src/formats/plugins/sql_parser.py,
+    responsibilities: [
+      "Parse SQL DDL statements",
+      "Extract table definitions",
+      "Identify constraints and relationships"
+    ],
+    interfaces: [
+      {method: "can_parse(file_path)", return: "bool", description: "Checks if file contains SQL DDL"},
+      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from SQL file"},
+      {method: "extract_tables(sql_content)", return: "List[Table]", description: "Extracts table definitions"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_CONSTRAINT", type: "uses"}
+    ],
+    test_coverage: 0
+  }
+  
+  #FD_GRAPHQL: &{
+    name: GraphQLParser,
+    path: src/format_detection/plugins/graphql/__init__.py,
+    responsibilities: [
+      "Parse GraphQL schema files",
+      "Extract type definitions and fields",
+      "Map GraphQL types to normalized data types",
+      "Identify non-nullable fields and constraints",
+      "Extract field descriptions from comments"
+    ],
+    interfaces: [
+      {method: "can_parse(filename, content)", return: "bool", description: "Checks if content is a valid GraphQL schema"},
+      {method: "parse_schema(filename, content)", return: "SchemaDetails", description: "Extracts schema from GraphQL content"},
+      {method: "get_format_type()", return: "FormatType.GRAPHQL", description: "Returns format type"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"}
+    ],
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_graphql_parser.py", description: "Unit tests for GraphQL schema parsing"}
+    ]
+  }
+  
+  #FD_JSON_SCHEMA: &{
+    name: JSONSchemaParser,
+    path: src/format_detection/plugins/json_schema/__init__.py,
+    responsibilities: [
+      "Parse JSON Schema documents",
+      "Extract property definitions and types",
+      "Support nested object properties",
+      "Extract validation constraints",
+      "Handle multiple type definitions",
+      "Identify primary keys and required fields"
+    ],
+    interfaces: [
+      {method: "can_parse(filename, content)", return: "bool", description: "Checks if content is a valid JSON Schema"},
+      {method: "parse_schema(filename, content)", return: "SchemaDetails", description: "Extracts schema from JSON Schema content"},
+      {method: "get_format_type()", return: "FormatType.JSON_SCHEMA", description: "Returns format type"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"},
+      {id: "#SE_CONSTRAINT", type: "uses"}
+    ],
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference with multiple enhancers"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_json_schema_parser.py", description: "Unit tests for JSON Schema parsing"}
+    ]
+  }

@@ -1,0 +1,121 @@
+{
+  "name": "clinerules-logger",
+  "displayName": "ClinerRules Logger",
+  "description": "Track and log interactions with .clinerules files",
+  "version": "1.0.0",
+  "publisher": "cline",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/*.clinerules.md",
+    "workspaceContains:**/Rules/*.md",
+    "onCommand:clinerules.ping",
+    "onCommand:clinerules.logManual",
+    "onCommand:clinerules.showRecent"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "clinerules.ping",
+        "title": "ClinerRules: Check Logger Status"
+      },
+      {
+        "command": "clinerules.logManual",
+        "title": "ClinerRules: Log Manual Interaction"
+      },
+      {
+        "command": "clinerules.showRecent",
+        "title": "ClinerRules: Show Recent Interactions"
+      }
+    ],
+    "configuration": {
+      "title": "ClinerRules Logger",
+      "properties": {
+        "clinerules.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable the ClinerRules logger"
+        },
+        "clinerules.serverHost": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host for the logger server"
+        },
+        "clinerules.serverPort": {
+          "type": "number",
+          "default": 5678,
+          "description": "Port for the logger server"
+        },
+        "clinerules.rulesDirectory": {
+          "type": "string",
+          "default": null,
+          "description": "Custom directory containing .clinerules files (if not in default location)"
+        },
+        "clinerules.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start the logger server on extension activation"
+        },
+        "clinerules.logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warning", "error"],
+          "default": "info",
+          "description": "Log level for the extension"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceExtname == .md && resourcePath =~ /.*Rules.*/",
+          "command": "clinerules.logManual",
+          "group": "clinerules"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "clinerules.ping",
+          "group": "clinerules"
+        },
+        {
+          "command": "clinerules.logManual",
+          "group": "clinerules"
+        },
+        {
+          "command": "clinerules.showRecent",
+          "group": "clinerules"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "postinstall": "node ./node_modules/vscode/bin/install",
+    "test": "node ./node_modules/vscode/bin/test"
+  },
+  "devDependencies": {
+    "vscode": "^1.1.37",
+    "eslint": "^7.32.0",
+    "@types/node": "^14.17.9"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cline/clinerules-logger"
+  },
+  "bugs": {
+    "url": "https://github.com/cline/clinerules-logger/issues"
+  },
+  "homepage": "https://github.com/cline/clinerules-logger#readme",
+  "keywords": [
+    "cline",
+    "clinerules",
+    "logger",
+    "tracking"
+  ],
+  "license": "Apache-2.0"
+}

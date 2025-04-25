@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=dda
+      - MONGODB_URI=mongodb://mongodb:27017/dda
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+    networks:
+      - dda-network
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=dda
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - dda-network
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - dda-network
+
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - dda-network
+
+  # For UI development (to be implemented later)
+  # ui:
+  #   build:
+  #     context: ./ui
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./ui:/app
+  #   environment:
+  #     - API_URL=http://app:8000
+  #   networks:
+  #     - dda-network
+
+networks:
+  dda-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  mongodb-data:
+  redis-data:

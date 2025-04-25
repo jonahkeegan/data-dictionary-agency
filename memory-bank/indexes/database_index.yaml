@@ -1,0 +1,196 @@
+timestamp: 2025-04-14T21:34:00-07:00
+components:
+  #DB_SCHEMA: &{
+    name: SchemaModel,
+    ^critical,
+    path: src/database/models/schema.py,
+    responsibilities: [
+      "Define data model for schema storage",
+      "Map schema components to database",
+      "Support diverse format schemas",
+      "Store schema metadata"
+    ],
+    interfaces: [
+      {method: "from_extracted_schema(schema)", return: "SchemaModel", description: "Creates model from extracted schema"},
+      {method: "to_dict()", return: "Dict", description: "Converts to dictionary representation"},
+      {method: "get_fields()", return: "List[FieldModel]", description: "Returns schema fields"}
+    ],
+    attributes: [
+      {name: "id", type: "ObjectId/UUID", description: "Unique identifier"},
+      {name: "repository_id", type: "ObjectId/UUID", description: "Associated repository ID"},
+      {name: "format_type", type: "FormatType", description: "Format of the source file"},
+      {name: "name", type: "str", description: "Schema name"},
+      {name: "path", type: "str", description: "Path within repository"},
+      {name: "fields", type: "List[FieldModel]", description: "Schema fields"},
+      {name: "metadata", type: "Dict", description: "Additional schema metadata"}
+    ],
+    pattern: None,
+    dependencies: [
+      {id: "#SE_MODELS", type: "maps"}
+    ],
+    decisions: ["#DB_001"]
+  }
+  
+  #DB_REPO: &{
+    name: RepositoryModel,
+    path: src/database/models/repository.py,
+    responsibilities: [
+      "Store repository metadata",
+      "Track processing status",
+      "Maintain repository history",
+      "Link to detected schemas"
+    ],
+    interfaces: [
+      {method: "create_from_url(url, branch, path)", return: "RepositoryModel", description: "Creates model from repository URL"}
+    ],
+    attributes: [
+      {name: "id", type: "UUID", description: "Unique identifier"},
+      {name: "url", type: "str", description: "Repository URL"},
+      {name: "branch", type: "str", description: "Repository branch"},
+      {name: "path", type: "str", description: "Repository subdirectory"},
+      {name: "status", type: "ProcessingStatus", description: "Current processing status"},
+      {name: "created_at", type: "datetime", description: "Creation timestamp"},
+      {name: "updated_at", type: "datetime", description: "Last update timestamp"},
+      {name: "formats", type: "List[FormatModel]", description: "Detected formats"}
+    ],
+    pattern: None,
+    dependencies: [],
+    decisions: ["#DB_001"]
+  }
+  
+  #DB_FORMAT: &{
+    name: FormatModel,
+    path: src/database/models/format.py,
+    responsibilities: [
+      "Store format metadata",
+      "Track detected formats",
+      "Link formats to repositories",
+      "Store format statistics"
+    ],
+    interfaces: [],
+    attributes: [
+      {name: "id", type: "UUID", description: "Unique identifier"},
+      {name: "repository_id", type: "UUID", description: "Associated repository"},
+      {name: "format_type", type: "FormatType", description: "Format type enum"},
+      {name: "count", type: "int", description: "Number of files"},
+      {name: "paths", type: "List[str]", description: "File paths"},
+      {name: "detected_at", type: "datetime", description: "Detection timestamp"}
+    ],
+    pattern: None,
+    dependencies: [],
+    decisions: []
+  }
+  
+  #DB_REL: &{
+    name: RelationshipModel,
+    path: src/database/models/relationship.py,
+    responsibilities: [
+      "Store relationships between schemas",
+      "Track relationship metadata",
+      "Store confidence scores",
+      "Define relationship types"
+    ],
+    interfaces: [],
+    attributes: [
+      {name: "id", type: "ObjectId/UUID", description: "Unique identifier"},
+      {name: "source_schema_id", type: "ObjectId/UUID", description: "Source schema ID"},
+      {name: "target_schema_id", type: "ObjectId/UUID", description: "Target schema ID"},
+      {name: "relationship_type", type: "RelationshipType", description: "Type of relationship"},
+      {name: "confidence", type: "float", description: "Confidence score (0-1)"},
+      {name: "cardinality", type: "Cardinality", description: "Relationship cardinality"},
+      {name: "metadata", type: "Dict", description: "Additional relationship metadata"}
+    ],
+    pattern: None,
+    dependencies: [
+      {id: "#DB_SCHEMA", type: "references"}
+    ],
+    decisions: []
+  }
+  
+  #DB_CONN: &{
+    name: DatabaseConnection,
+    path: src/database/connection.py,
+    responsibilities: [
+      "Manage database connections",
+      "Initialize database",
+      "Configure connection pools",
+      "Handle connection errors"
+    ],
+    interfaces: [
+      {method: "get_postgres_connection()", return: "Connection", description: "Gets PostgreSQL connection"},
+      {method: "get_mongo_connection()", return: "Connection", description: "Gets MongoDB connection"},
+      {method: "initialize_database()", return: "None", description: "Sets up database tables/collections"},
+      {method: "close_connections()", return: "None", description: "Closes all database connections"}
+    ],
+    pattern: Singleton,
+    dependencies: [],
+    decisions: ["#DB_001"]
+  }
+  
+  #DB_BASE_REPO: &{
+    name: BaseRepository,
+    path: src/database/repositories/base.py,
+    responsibilities: [
+      "Define repository pattern interface",
+      "Provide common CRUD operations",
+      "Handle database transactions",
+      "Implement query patterns"
+    ],
+    interfaces: [
+      {method: "find_by_id(id)", return: "Model", description: "Finds entity by ID"},
+      {method: "find_all()", return: "List[Model]", description: "Finds all entities"},
+      {method: "save(model)", return: "Model", description: "Saves entity to database"},
+      {method: "delete(id)", return: "bool", description: "Deletes entity from database"},
+      {method: "find_by_criteria(criteria)", return: "List[Model]", description: "Finds entities by criteria"}
+    ],
+    pattern: Repository,
+    dependencies: [
+      {id: "#DB_CONN", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #DB_SCHEMA_REPO: &{
+    name: SchemaRepository,
+    path: src/database/repositories/schema_repo.py,
+    responsibilities: [
+      "Store and retrieve schema data",
+      "Index schemas for fast retrieval",
+      "Query schemas by format, repository",
+      "Handle schema relationships"
+    ],
+    interfaces: [
+      {method: "find_by_repository_id(repository_id)", return: "List[SchemaModel]", description: "Finds schemas by repository"},
+      {method: "find_by_format_type(format_type)", return: "List[SchemaModel]", description: "Finds schemas by format type"},
+      {method: "find_by_path(repository_id, path)", return: "SchemaModel", description: "Finds schema by path"},
+      {method: "get_related_schemas(schema_id)", return: "List[SchemaModel]", description: "Gets related schemas"}
+    ],
+    pattern: Repository,
+    dependencies: [
+      {id: "#DB_BASE_REPO", type: "implements"},
+      {id: "#DB_SCHEMA", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #DB_REPO_REPO: &{
+    name: RepositoryRepository,
+    path: src/database/repositories/repository_repo.py,
+    responsibilities: [
+      "Store and retrieve repository data",
+      "Track repository processing status",
+      "Query repositories by status",
+      "Manage repository history"
+    ],
+    interfaces: [
+      {method: "find_by_url(url)", return: "RepositoryModel", description: "Finds repository by URL"},
+      {method: "find_by_status(status)", return: "List[RepositoryModel]", description: "Finds repositories by status"},
+      {method: "update_status(repository_id, status)", return: "RepositoryModel", description: "Updates repository status"}
+    ],
+    pattern: Repository,
+    dependencies: [
+      {id: "#DB_BASE_REPO", type: "implements"},
+      {id: "#DB_REPO", type: "uses"}
+    ],
+    decisions: []
+  }

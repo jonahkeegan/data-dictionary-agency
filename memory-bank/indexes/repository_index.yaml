@@ -1,0 +1,136 @@
+timestamp: 2025-04-14T21:33:00-07:00
+components:
+  #RC_GITHUB: &{
+    name: GitHubConnector,
+    ^critical,
+    path: src/repository/connector.py,
+    responsibilities: [
+      "GitHub API integration",
+      "Authenticate with GitHub",
+      "Access repository content",
+      "Handle rate limits",
+      "Manage OAuth tokens"
+    ],
+    interfaces: [
+      {method: "connect(repo_url, branch='main')", return: "RepositoryConnection", description: "Establishes connection to GitHub repository"},
+      {method: "get_file_content(path)", return: "bytes", description: "Retrieves content of a file"},
+      {method: "list_files(path='/')", return: "List[FileInfo]", description: "Lists files in a directory"},
+      {method: "clone_repository(destination_path)", return: "Path", description: "Clones repository to local filesystem"}
+    ],
+    pattern: Adapter,
+    dependencies: [
+      {id: "#DB_REPO", type: "uses"},
+      {id: "#UTIL_LOG", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #RC_CLONE: &{
+    name: CloneManager,
+    path: src/repository/clone_manager.py,
+    responsibilities: [
+      "Create local clones of repositories",
+      "Manage repository cache",
+      "Clean up old repositories",
+      "Handle submodules"
+    ],
+    interfaces: [
+      {method: "clone(repo_url, branch='main')", return: "Path", description: "Clones repository to managed location"},
+      {method: "get_clone_path(repo_id)", return: "Path", description: "Gets path to existing clone"},
+      {method: "cleanup_old_clones(max_age_days=7)", return: "int", description: "Removes old clones"}
+    ],
+    pattern: Factory,
+    dependencies: [
+      {id: "#RC_GITHUB", type: "uses"},
+      {id: "#UTIL_FILE", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #RC_PATH: &{
+    name: PathTraversal,
+    path: src/repository/path_traversal.py,
+    responsibilities: [
+      "Traverse repository directories",
+      "Apply path filters",
+      "Detect file types",
+      "Handle large repositories efficiently"
+    ],
+    interfaces: [
+      {method: "traverse(root_path, path_filter=None)", return: "Iterator[Path]", description: "Traverses repository path"},
+      {method: "filter_by_extension(extensions)", return: "PathFilter", description: "Creates filter for specific extensions"},
+      {method: "filter_by_size(max_size_mb)", return: "PathFilter", description: "Creates filter for file size limit"}
+    ],
+    pattern: Iterator,
+    dependencies: [
+      {id: "#UTIL_FILE", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #RC_FILE: &{
+    name: FileExtractor,
+    path: src/repository/file_extractor.py,
+    responsibilities: [
+      "Extract file content from repositories",
+      "Handle large files with streaming",
+      "Detect text/binary content",
+      "Apply character encoding detection"
+    ],
+    interfaces: [
+      {method: "extract_text(file_path)", return: "str", description: "Extracts text content with encoding detection"},
+      {method: "extract_binary(file_path)", return: "bytes", description: "Extracts binary content"},
+      {method: "extract_chunked(file_path, chunk_size=4096)", return: "Generator[bytes]", description: "Extracts file in chunks"},
+      {method: "detect_encoding(file_path)", return: "str", description: "Detects character encoding"}
+    ],
+    pattern: None,
+    dependencies: [
+      {id: "#UTIL_FILE", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #API_REPO: &{
+    name: RepositoryController,
+    path: src/api/controllers/repository_controller.py,
+    responsibilities: [
+      "Handle repository API requests",
+      "Validate repository URLs",
+      "Initiate repository processing",
+      "Return repository analysis status"
+    ],
+    interfaces: [
+      {method: "submit_repository(repo_url, branch, path)", return: "RepositoryJob", description: "Submits repository for analysis"},
+      {method: "get_repository_status(repo_id)", return: "RepositoryStatus", description: "Gets repository analysis status"},
+      {method: "list_repositories()", return: "List[RepositorySummary]", description: "Lists analyzed repositories"}
+    ],
+    pattern: RestController,
+    dependencies: [
+      {id: "#RC_GITHUB", type: "uses"},
+      {id: "#DB_REPO_REPO", type: "uses"}
+    ],
+    decisions: []
+  }
+  
+  #WK_REPO: &{
+    name: RepositoryWorker,
+    path: src/workers/repository_worker.py,
+    responsibilities: [
+      "Process repository analysis jobs",
+      "Coordinate format detection",
+      "Handle large repositories",
+      "Report progress updates"
+    ],
+    interfaces: [
+      {method: "process_repository(repo_id)", return: "RepositoryResult", description: "Processes repository analysis job"},
+      {method: "report_progress(repo_id, progress)", return: "None", description: "Reports job progress"}
+    ],
+    pattern: Worker,
+    dependencies: [
+      {id: "#RC_GITHUB", type: "uses"},
+      {id: "#RC_PATH", type: "uses"},
+      {id: "#FD_CORE", type: "uses"},
+      {id: "#DB_REPO_REPO", type: "uses"}
+    ],
+    decisions: []
+  }
