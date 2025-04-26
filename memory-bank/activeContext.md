@@ -1,8 +1,8 @@
 # Active Context: Data Dictionary Agency (DDA)
-timestamp: 2025-04-25T08:03:00-07:00
+timestamp: 2025-04-25T22:36:00-07:00
 
 ## ACTIVE_MEMORY
-- Components: [#FD_GRAPHQL, #FD_JSON_SCHEMA, #FD_CORE, #FD_PARSE, #RD_CORE, #VE_RENDER, #UI_CORE, #FD_TYPEINF] (currently in focus)
+- Components: [#FD_GRAPHQL, #FD_JSON_SCHEMA, #FD_SQL, #FD_CORE, #FD_PARSE, #RD_CORE, #VE_RENDER, #UI_CORE, #FD_TYPEINF] (currently in focus)
 - Decisions: [#ARCH_002, #FD_001] (relevant to current task)
 - Patterns: [@Plugin, @Strategy, @Factory, @Repository, @Enhancer] (applied in this task)
 - Tasks: [TASK_002] (second sprint - format expansion)
@@ -51,13 +51,14 @@ The current development focus is on implementing the first sprint for the Data D
 ## Next Sprint Focus (TASK_002)
 
 1. **Additional Format Parsers** 🔍
-   - Implement parsers for the remaining target formats (6 out of 10 completed)
+   - Implement parsers for the remaining target formats (8 out of 10 completed)
    - ✅ GraphQL schema parser with type inference and constraints
    - ✅ JSON Schema parser with nested object and validation support
    - ✅ Avro schema parser with complex type handling
    - ✅ XML parser with XSD/DTD support and dialect detection
    - ✅ YAML format parser with test suite
-   - 🔄 SQL DDL, Protobuf, OpenAPI/Swagger, Parquet, ORC (pending)
+   - ✅ SQL DDL parser with dialect detection and relationship extraction
+   - 🔄 Protobuf, OpenAPI/Swagger, Parquet, ORC (pending)
    - Integrate with enhanced type inference system for improved type detection
    - Implement confidence scoring for format detection
 

@@ -187,23 +187,36 @@ components:
   
   #FD_SQL: &{
     name: SQLParser,
-    path: src/formats/plugins/sql_parser.py,
+    path: src/format_detection/plugins/sql/__init__.py,
     responsibilities: [
       "Parse SQL DDL statements",
       "Extract table definitions",
-      "Identify constraints and relationships"
+      "Identify constraints and relationships",
+      "Detect SQL dialects (MySQL, PostgreSQL, SQLite, etc.)",
+      "Map SQL types to normalized data types",
+      "Extract foreign key relationships",
+      "Identify primary keys and indices",
+      "Extract sample data from table definitions"
     ],
     interfaces: [
-      {method: "can_parse(file_path)", return: "bool", description: "Checks if file contains SQL DDL"},
-      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from SQL file"},
-      {method: "extract_tables(sql_content)", return: "List[Table]", description: "Extracts table definitions"}
+      {method: "can_parse(content, filename)", return: "Tuple[bool, float]", description: "Checks if content is valid SQL DDL with confidence score"},
+      {method: "parse_schema(content, filename)", return: "SchemaDetails", description: "Extracts schema from SQL DDL content"},
+      {method: "extract_sample_data(content, max_records)", return: "List[Dict[str, Any]]", description: "Extracts sample data from SQL DDL content"}
     ],
     pattern: Plugin,
     dependencies: [
       {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"},
       {id: "#SE_CONSTRAINT", type: "uses"}
     ],
-    test_coverage: 0
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_sql_parser.py", description: "Unit tests for SQL DDL schema parsing"}
+    ]
   }
   
   #FD_GRAPHQL: &{

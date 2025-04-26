@@ -39,7 +39,8 @@ timestamp: 2025-04-25T07:58:00-07:00
   - JSON Schema parser with nested object support and constraint extraction
   - Avro schema parser with complex type handling and nested structure support
   - XML parser with XSD/DTD support, dialect detection, and comprehensive field extraction
-  - Unit tests for all four parser implementations
+  - SQL DDL parser with dialect detection, relationship extraction, and comprehensive type mapping
+  - Unit tests for all five parser implementations
 
 ## In Progress
 
@@ -109,7 +110,7 @@ None currently.
 
 | Subtask                        | Status      | Completion | Notes                                      |
 |--------------------------------|-------------|------------|-------------------------------------------|
-| SUBTASK_002.1: Format Parsers  | In Progress | 85%        | JSON, CSV, GraphQL, JSON Schema, Avro, XML, and YAML parsers implemented with tests |
+| SUBTASK_002.1: Format Parsers  | In Progress | 90%        | JSON, CSV, GraphQL, JSON Schema, Avro, XML, YAML, and SQL DDL parsers implemented with tests |
 | SUBTASK_002.2: Type Inference  | Completed   | 100%       | Enhanced type inference system with confidence scoring |
 | SUBTASK_002.3: Relationship Detection | Completed | 100% | Multi-strategy relationship detection with confidence scoring |
 | SUBTASK_002.4: Visualization Engine | Not Started | 0% | D3.js based ER diagram visualization |

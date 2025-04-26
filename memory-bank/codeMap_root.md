@@ -1,8 +1,8 @@
 # CodeMap Root: Data Dictionary Agency (DDA)
-timestamp: 2025-04-25T08:11:00-07:00
+timestamp: 2025-04-25T22:37:00-07:00
 
 ## ACTIVE_MEMORY
-- Components: [#FD_GRAPHQL, #FD_JSON_SCHEMA, #FD_CORE, #FD_YAML_NEW] (currently in focus)
+- Components: [#FD_GRAPHQL, #FD_JSON_SCHEMA, #FD_SQL_NEW, #FD_CORE, #FD_YAML_NEW] (currently in focus)
 - Decisions: [#ARCH_002, #FD_001] (relevant to current task)
 - Patterns: [@Plugin, @Strategy, @Factory] (applied in this task)
 - Tasks: [TASK_002] (second sprint - format expansion)
@@ -113,7 +113,7 @@ timestamp: 2025-04-25T08:11:00-07:00
         [protobuf]/ # Protobuf format parser
           __init__.py #[FD_PROTO_NEW] "Protobuf format parser" @patterns[Plugin] @index[formats]
         [sql]/ # SQL format parser
-          __init__.py #[FD_SQL_NEW] "SQL format parser" @patterns[Plugin] @index[formats]
+          __init__.py #[FD_SQL_NEW] "SQL format parser with dialect detection and relationship extraction" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [xml]/ # XML format parser
           __init__.py #[FD_XML] "Enhanced XML parser with XSD/DTD support" @patterns[Plugin] @index[formats]
         [yaml]/ # YAML format parser
