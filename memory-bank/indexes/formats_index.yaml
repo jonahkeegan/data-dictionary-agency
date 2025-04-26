@@ -1,4 +1,4 @@
-timestamp: 2025-04-24T21:10:00-07:00
+timestamp: 2025-04-26T10:30:00-07:00
 components:
   #FD_CORE: &{
     name: FormatDetectionEngine,
@@ -278,5 +278,39 @@ components:
     ],
     tests: [
       {filename: "tests/unit/test_json_schema_parser.py", description: "Unit tests for JSON Schema parsing"}
+    ]
+  }
+  
+  #FD_PROTOBUF: &{
+    name: ProtobufParser,
+    path: src/format_detection/plugins/protobuf/__init__.py,
+    responsibilities: [
+      "Parse Protocol Buffers schema files",
+      "Extract message definitions and fields",
+      "Handle nested message structures",
+      "Support enums and oneof fields",
+      "Process map type definitions",
+      "Extract service definitions and methods",
+      "Map Protocol Buffers types to normalized data types",
+      "Process import statements and dependencies"
+    ],
+    interfaces: [
+      {method: "can_parse(content, filename)", return: "Tuple[bool, float]", description: "Checks if content is a valid Protocol Buffers schema with confidence score"},
+      {method: "parse_schema(content, filename)", return: "SchemaDetails", description: "Extracts schema from Protocol Buffers schema content"},
+      {method: "extract_sample_data(content, max_records)", return: "List[Dict[str, Any]]", description: "Extracts sample message structures from protocol definition"},
+      {method: "get_format_type()", return: "FormatType.PROTOBUF", description: "Returns format type"}
+    ],
+    pattern: Plugin,
+    dependencies: [
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"}
+    ],
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_protobuf_parser.py", description: "Unit tests for Protobuf schema parsing"}
     ]
   }

@@ -1,5 +1,5 @@
 # Active Context: Data Dictionary Agency (DDA)
-timestamp: 2025-04-25T22:36:00-07:00
+timestamp: 2025-04-26T10:30:00-07:00
 
 ## ACTIVE_MEMORY
 - Components: [#FD_GRAPHQL, #FD_JSON_SCHEMA, #FD_SQL, #FD_CORE, #FD_PARSE, #RD_CORE, #VE_RENDER, #UI_CORE, #FD_TYPEINF] (currently in focus)
@@ -58,7 +58,8 @@ The current development focus is on implementing the first sprint for the Data D
    - ✅ XML parser with XSD/DTD support and dialect detection
    - ✅ YAML format parser with test suite
    - ✅ SQL DDL parser with dialect detection and relationship extraction
-   - 🔄 Protobuf, OpenAPI/Swagger, Parquet, ORC (pending)
+   - ✅ Protobuf parser with message, enum, service, and map type support
+   - 🔄 OpenAPI/Swagger, Parquet, ORC (pending)
    - Integrate with enhanced type inference system for improved type detection
    - Implement confidence scoring for format detection
 

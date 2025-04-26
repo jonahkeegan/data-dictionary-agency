@@ -1,5 +1,5 @@
 # CodeMap Root: Data Dictionary Agency (DDA)
-timestamp: 2025-04-25T22:37:00-07:00
+timestamp: 2025-04-26T10:30:00-07:00
 
 ## ACTIVE_MEMORY
 - Components: [#FD_GRAPHQL, #FD_JSON_SCHEMA, #FD_SQL_NEW, #FD_CORE, #FD_YAML_NEW] (currently in focus)
@@ -111,7 +111,7 @@ timestamp: 2025-04-25T22:37:00-07:00
         [parquet]/ # Parquet format parser
           __init__.py #[FD_PARQUET_NEW] "Parquet format parser" @patterns[Plugin] @index[formats]
         [protobuf]/ # Protobuf format parser
-          __init__.py #[FD_PROTO_NEW] "Protobuf format parser" @patterns[Plugin] @index[formats]
+          __init__.py #[FD_PROTOBUF] "Protocol Buffers parser with message, enum, service and map type support" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [sql]/ # SQL format parser
           __init__.py #[FD_SQL_NEW] "SQL format parser with dialect detection and relationship extraction" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [xml]/ # XML format parser

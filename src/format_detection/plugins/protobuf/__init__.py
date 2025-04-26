@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.format_detection.models import DataType, FieldConstraint, FieldInfo, SchemaDetails
+from src.format_detection.models import DataType, FieldConstraint, FieldInfo, FormatType, SchemaDetails
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,15 @@ class ProtobufParser:
             "oneof": DataType.OBJECT,
         }
 
+    def get_format_type(self) -> FormatType:
+        """
+        Get the format type handled by this parser.
+        
+        Returns:
+            FormatType: The format type for Protocol Buffers
+        """
+        return FormatType.PROTOBUF
+
     def can_parse(self, content: bytes, filename: Optional[str] = None) -> Tuple[bool, float]:
         """Check if content can be parsed as Protobuf schema.
         
@@ -55,6 +64,10 @@ class ProtobufParser:
         if filename and filename.lower().endswith(('.proto')):
             # High confidence based on extension
             return True, 0.95
+        
+        # Return early for empty content
+        if not content:
+            return False, 0.0
         
         # Check content patterns
         try:
@@ -133,6 +146,8 @@ class ProtobufParser:
             # Extract services
             services = self._extract_services(proto_content)
             metadata["services"] = [svc["name"] for svc in services]
+            # Store detailed service information for tests
+            metadata["_services_details"] = services
             
             # Process message fields
             for message in messages:
@@ -145,9 +160,61 @@ class ProtobufParser:
                     field_type = field["type"]
                     field_number = field["number"]
                     
+                    # Detect map type - handle map<type, type> format explicitly
+                    map_match = re.match(r'map<([^,]+),\s*([^>]+)>', field_type)
+                    is_map = bool(map_match)
+                    
                     # Determine if field is repeated (array)
                     is_repeated = field.get("repeated", False)
-                    data_type = DataType.ARRAY if is_repeated else self._map_protobuf_type(field_type)
+                    
+                    # Prepare field metadata
+                    field_metadata = {
+                        "message": message_name,
+                        "field_number": field_number,
+                        "is_repeated": is_repeated,
+                        "original_type": field_type,
+                    }
+                    
+                    # Add map-specific metadata
+                    if map_match:
+                        field_metadata["is_map"] = True
+                        field_metadata["key_type"] = map_match.group(1)
+                        field_metadata["value_type"] = map_match.group(2)
+                    
+                    # Determine data type - handle map types as special case
+                    if field_type.startswith("map<"):
+                        data_type = DataType.OBJECT
+                    elif is_repeated:
+                        data_type = DataType.ARRAY
+                    elif "." in field_type:
+                        # Handle qualified type names (e.g., Status or User.Role enums)
+                        # Check if it refers to an enum type
+                        if field_type in metadata["enums"]:
+                            data_type = DataType.ENUM
+                        else:
+                            # Check for nested enums like User.Role
+                            parts = field_type.split(".")
+                            if len(parts) == 2:
+                                parent_msg = next((msg for msg in messages if msg["name"] == parts[0]), None)
+                                if parent_msg:
+                                    nested_enum = next((enum for enum in parent_msg.get("nested_enums", []) 
+                                                      if enum["name"] == parts[1]), None)
+                                    if nested_enum:
+                                        data_type = DataType.ENUM
+                                    else:
+                                        data_type = DataType.OBJECT
+                                else:
+                                    data_type = DataType.OBJECT
+                            else:
+                                data_type = DataType.OBJECT
+                    # Handle enum references without qualification
+                    elif field_type in [enum["name"] for enum in message.get("nested_enums", [])] or field_type in [enum["name"] for enum in enums]:
+                        data_type = DataType.ENUM
+                    # Handle map type
+                    elif re.match(r'map<([^,]+),\s*([^>]+)>', field_type):
+                        data_type = DataType.OBJECT
+                    else:
+                        data_type = self._map_protobuf_type(field_type)
                     
                     # Add field constraints
                     constraints = []
@@ -175,6 +242,10 @@ class ProtobufParser:
                             description=f"Default value: {field['default']}",
                         ))
                     
+                    # Add oneof group if present
+                    if "oneof_group" in field:
+                        field_metadata["oneof_group"] = field["oneof_group"]
+                    
                     # Add field to fields list
                     fields.append(FieldInfo(
                         name=field_name,
@@ -183,12 +254,7 @@ class ProtobufParser:
                         nullable=field.get("optional", True) or metadata["syntax"] == "proto3",
                         description=field.get("description", f"Field {field_name} in message {message_name}"),
                         constraints=constraints,
-                        metadata={
-                            "message": message_name,
-                            "field_number": field_number,
-                            "is_repeated": is_repeated,
-                            "original_type": field_type,
-                        },
+                        metadata=field_metadata,
                     ))
             
             # Process enums
@@ -209,8 +275,8 @@ class ProtobufParser:
                     },
                 ))
             
-            # Add dependencies based on imports
-            dependencies = [{"type": "import", "path": imp} for imp in metadata["imports"]]
+            # Add dependencies based on imports - store as simple strings
+            dependencies = metadata["imports"].copy() if metadata["imports"] else []
             
             return SchemaDetails(
                 fields=fields,
@@ -301,9 +367,10 @@ class ProtobufParser:
         """
         messages = []
         
-        # Find all message blocks first
+        # Find all message blocks and nested enums first
         message_blocks = []
         message_pattern = r'message\s+([A-Za-z][A-Za-z0-9_]*)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}'
+        nested_enum_pattern = r'enum\s+([A-Za-z][A-Za-z0-9_]*)\s*\{([^{}]*)\}'
         
         # Function to extract nested messages
         def extract_message_blocks(content, prefix=""):
@@ -334,8 +401,64 @@ class ProtobufParser:
                 "nested_enums": [],
             }
             
-            # Extract fields
-            field_pattern = r'(?:(?:required|optional|repeated)\s+)?([A-Za-z][A-Za-z0-9_.<>]*)\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*(\d+)(?:\s+\[([^\]]*)\])?;'
+            # Extract nested enums first
+            nested_enum_matches = re.finditer(nested_enum_pattern, msg_content)
+            for enum_match in nested_enum_matches:
+                enum_name = enum_match.group(1)
+                enum_content = enum_match.group(2)
+                
+                nested_enum = {
+                    "name": enum_name,
+                    "values": []
+                }
+                
+                # Extract enum values
+                value_pattern = r'([A-Za-z][A-Za-z0-9_]*)\s*=\s*(\d+);'
+                value_matches = re.finditer(value_pattern, enum_content)
+                
+                for value_match in value_matches:
+                    value_name = value_match.group(1)
+                    value_number = int(value_match.group(2))
+                    
+                    nested_enum["values"].append({
+                        "name": value_name,
+                        "number": value_number,
+                    })
+                
+                message["nested_enums"].append(nested_enum)
+            
+            # Extract oneof blocks first
+            oneof_blocks = {}
+            oneof_pattern = r'oneof\s+([A-Za-z][A-Za-z0-9_]*)\s*\{([^{}]*)\}'
+            oneof_matches = re.finditer(oneof_pattern, msg_content)
+            
+            for oneof_match in oneof_matches:
+                oneof_name = oneof_match.group(1)
+                oneof_content = oneof_match.group(2)
+                oneof_blocks[oneof_name] = oneof_content
+            
+            # Process oneof fields
+            for oneof_name, oneof_content in oneof_blocks.items():
+                # Extract fields in the oneof - improved pattern to capture map types
+                oneof_field_pattern = r'(map<[^>]+>|[A-Za-z][A-Za-z0-9_.<>]*)\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*(\d+)'
+                oneof_field_matches = re.finditer(oneof_field_pattern, oneof_content)
+                
+                for field_match in oneof_field_matches:
+                    field_type = field_match.group(1)
+                    field_name = field_match.group(2)
+                    field_number = int(field_match.group(3))
+                    
+                    field = {
+                        "name": field_name,
+                        "type": field_type,
+                        "number": field_number,
+                        "oneof_group": oneof_name,
+                    }
+                    
+                    message["fields"].append(field)
+            
+            # Extract fields outside of oneof blocks - improved pattern to capture map types completely
+            field_pattern = r'(?:(?:required|optional|repeated)\s+)?(map<[^>]+>|[A-Za-z][A-Za-z0-9_.<>]*)\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*(\d+)(?:\s+\[([^\]]*)\])?;'
             field_matches = re.finditer(field_pattern, msg_content)
             
             for field_match in field_matches:
@@ -343,6 +466,10 @@ class ProtobufParser:
                 field_name = field_match.group(2)
                 field_number = int(field_match.group(3))
                 field_options = field_match.group(4)
+                
+                # Skip fields that are in oneof blocks
+                if any(re.search(fr'{field_name}\s*=\s*{field_number}', content) for content in oneof_blocks.values()):
+                    continue
                 
                 field = {
                     "name": field_name,
@@ -500,13 +627,13 @@ class ProtobufParser:
             for i, message in enumerate(messages[:max_records]):
                 sample_record = {
                     "message_name": message["name"],
-                    "fields": [],
+                    "fields": {},
                 }
                 
                 # Add fields
                 for field in message["fields"]:
+                    field_name = field["name"]
                     field_info = {
-                        "name": field["name"],
                         "type": field["type"],
                         "number": field["number"],
                     }
@@ -523,7 +650,11 @@ class ProtobufParser:
                     if "default" in field:
                         field_info["default"] = field["default"]
                     
-                    sample_record["fields"].append(field_info)
+                    # Add oneof group if present
+                    if "oneof_group" in field:
+                        field_info["oneof_group"] = field["oneof_group"]
+                    
+                    sample_record["fields"][field_name] = field_info
                 
                 sample_records.append(sample_record)
             
@@ -543,20 +674,6 @@ def register_plugin():
     return {
         "format_id": "protobuf",
         "parser": ProtobufParser(),
-        "format_info": {
-            "id": "protobuf",
-            "name": "Protocol Buffers",
-            "description": "Google Protocol Buffers (protobuf) Schema Definition",
-            "mime_types": ["text/x-protobuf", "application/x-protobuf"],
-            "extensions": [".proto"],
-            "capabilities": {
-                "schema_extraction": True,
-                "type_inference": True,
-                "relationship_detection": True,
-                "streaming": False,
-            },
-            "examples": ["syntax =", "message ", "enum ", "service ", "rpc "],
-            "schema_type": "message",
-            "version": "proto3",
-        }
+        "priority": 60,  # Medium-high priority
+        "description": "Protocol Buffers schema parser"
     }
