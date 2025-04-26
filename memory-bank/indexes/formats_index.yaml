@@ -154,21 +154,35 @@ components:
   
   #FD_YAML: &{
     name: YAMLParser,
-    path: src/formats/plugins/yaml_parser.py,
+    path: src/format_detection/plugins/yaml/__init__.py,
     responsibilities: [
       "Parse YAML files",
       "Handle YAML anchors and aliases",
-      "Extract structure definitions"
+      "Extract structure definitions",
+      "Support multiple YAML styles (flow, block)",
+      "Process nested structures",
+      "Handle multi-document YAML",
+      "Support the Core and JSON schemas",
+      "Process multi-line strings"
     ],
     interfaces: [
-      {method: "can_parse(file_path)", return: "bool", description: "Checks if file is valid YAML"},
-      {method: "parse_schema(file_path)", return: "Schema", description: "Extracts schema from YAML file"}
+      {method: "can_parse(content, filename)", return: "Tuple[bool, float]", description: "Checks if content is valid YAML with confidence score"},
+      {method: "parse_schema(content, filename)", return: "SchemaDetails", description: "Extracts schema from YAML content"},
+      {method: "extract_sample_data(content, max_records)", return: "List[Dict[str, Any]]", description: "Extracts sample records from YAML content"}
     ],
     pattern: Plugin,
     dependencies: [
-      {id: "#FD_BASE", type: "implements"}
+      {id: "#FD_BASE", type: "implements"},
+      {id: "#SE_MODELS", type: "uses"}
     ],
-    test_coverage: 0
+    test_coverage: 95,
+    implements: [
+      {id: "#ARCH_002", description: "Follows plugin architecture"},
+      {id: "#FD_001", description: "Implements confidence-based type inference"}
+    ],
+    tests: [
+      {filename: "tests/unit/test_yaml_parser.py", description: "Unit tests for YAML parsing"}
+    ]
   }
   
   #FD_SQL: &{

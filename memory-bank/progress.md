@@ -109,7 +109,7 @@ None currently.
 
 | Subtask                        | Status      | Completion | Notes                                      |
 |--------------------------------|-------------|------------|-------------------------------------------|
-| SUBTASK_002.1: Format Parsers  | In Progress | 80%        | JSON, CSV, GraphQL, JSON Schema, Avro, and XML parsers implemented with tests |
+| SUBTASK_002.1: Format Parsers  | In Progress | 85%        | JSON, CSV, GraphQL, JSON Schema, Avro, XML, and YAML parsers implemented with tests |
 | SUBTASK_002.2: Type Inference  | Completed   | 100%       | Enhanced type inference system with confidence scoring |
 | SUBTASK_002.3: Relationship Detection | Completed | 100% | Multi-strategy relationship detection with confidence scoring |
 | SUBTASK_002.4: Visualization Engine | Not Started | 0% | D3.js based ER diagram visualization |

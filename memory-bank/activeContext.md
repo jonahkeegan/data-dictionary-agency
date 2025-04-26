@@ -56,7 +56,8 @@ The current development focus is on implementing the first sprint for the Data D
    - ✅ JSON Schema parser with nested object and validation support
    - ✅ Avro schema parser with complex type handling
    - ✅ XML parser with XSD/DTD support and dialect detection
-   - 🔄 YAML, SQL DDL, Protobuf, OpenAPI/Swagger, Parquet, ORC (pending)
+   - ✅ YAML format parser with test suite
+   - 🔄 SQL DDL, Protobuf, OpenAPI/Swagger, Parquet, ORC (pending)
    - Integrate with enhanced type inference system for improved type detection
    - Implement confidence scoring for format detection
 

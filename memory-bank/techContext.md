@@ -79,6 +79,7 @@ The DDA will be implemented using the following technology stack:
 - avro (1.11+): Avro file handling
 - h5py (3.8+): HDF5 file support
 - pyorc (0.8+): ORC file support
+- pyyaml (6.0+): YAML parsing and schema extraction
 
 #### Visualization
 - Cytoscape.js (3.25+): Graph visualization

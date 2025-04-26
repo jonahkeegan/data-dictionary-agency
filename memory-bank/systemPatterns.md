@@ -159,6 +159,7 @@ The Format Detection Engine uses a plugin architecture to support multiple file 
     participant JP as JSONParser
     participant CP as CSVParser
     participant XP as XMLParser
+    participant YP as YAMLParser
     participant GQL as GraphQLParser
     participant JSP as JSONSchemaParser
     
@@ -173,6 +174,8 @@ The Format Detection Engine uses a plugin architecture to support multiple file 
     FD->>Registry: Add XMLParser
     Client->>FD: registerParser(GraphQLParser)
     FD->>Registry: Add GraphQLParser
+    Client->>FD: registerParser(YAMLParser)
+    FD->>Registry: Add YAMLParser
     Client->>FD: registerParser(JSONSchemaParser)
     FD->>Registry: Add JSONSchemaParser
     
