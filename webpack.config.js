@@ -1,12 +1,19 @@
 const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
-  entry: './src/visualization/index.js',
+  entry: {
+    visualization: './src/visualization/index.js',
+    app: './src/ui/index.js'
+  },
   output: {
-    filename: 'visualization.bundle.js',
+    filename: '[name].bundle.js',
     path: path.resolve(__dirname, 'dist'),
-    library: 'DataDictionaryVisualization',
-    libraryTarget: 'umd',
+    library: {
+      name: 'DataDictionaryAgency',
+      type: 'umd',
+      export: 'default',
+    },
     globalObject: 'this'
   },
   module: {
@@ -17,15 +24,40 @@ module.exports = {
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-env']
+            presets: ['@babel/preset-env', '@babel/preset-react']
           }
         }
+      },
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader']
       }
     ]
   },
   resolve: {
-    extensions: ['.js']
+    extensions: ['.js', '.jsx']
   },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: './src/ui/index.html',
+      filename: 'index.html',
+      excludeChunks: ['visualization']
+    })
+  ],
   devtool: 'source-map',
-  mode: 'development'
+  mode: 'development',
+  devServer: {
+    static: {
+      directory: path.join(__dirname, 'dist'),
+    },
+    compress: true,
+    port: 3000,
+    hot: true,
+    historyApiFallback: true
+  },
+  optimization: {
+    splitChunks: {
+      chunks: 'all',
+    },
+  },
 };
