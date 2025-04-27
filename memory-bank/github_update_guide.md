@@ -180,6 +180,29 @@ git config --global core.editor "notepad"
 
 ## Recent Updates Log
 
+### April 26, 2025 - Parquet and ORC Parser Test Fixes
+
+#### Files Added/Modified:
+- `tests/unit/test_parquet_parser.py`: Fixed mock approach for PyArrow integration
+- `tests/unit/test_orc_parser.py`: Fixed mock approach for PyArrow integration
+
+#### Memory Bank Updates:
+- Updated `progress.md`: All parser tests now passing
+- Updated `task_002_second_sprint.md`: Marked Parquet and ORC parser tests as complete
+- Updated `activeContext.md`: Added Parquet and ORC parsers to completed components
+- Updated `codeMap_root.md`: Updated Parquet, ORC and OpenAPI parser status in PROJECT_STRUCTURE
+
+#### Commit Message:
+```
+Fix Parquet and ORC parser tests for complete test coverage
+
+- Refactor tests to use SchemaDetails mock instead of low-level PyArrow type checking
+- Fix type mapping for structured fields (OBJECT vs STRING type issues)
+- Ensure extract_sample_data tests properly handle PyArrow objects
+- Update documentation to reflect all parser tests passing
+- Complete SUBTASK_002.1 (Additional Format Parser Implementation)
+```
+
 ### April 26, 2025 - Protobuf Parser Implementation
 
 #### Files Added/Modified:

@@ -59,7 +59,9 @@ The current development focus is on implementing the first sprint for the Data D
    - ✅ YAML format parser with test suite
    - ✅ SQL DDL parser with dialect detection and relationship extraction
    - ✅ Protobuf parser with message, enum, service, and map type support
-   - 🔄 OpenAPI/Swagger, Parquet, ORC (pending)
+   - ✅ OpenAPI/Swagger parser with comprehensive API structure extraction
+   - ✅ Parquet schema parser with columnar data structure extraction
+   - ✅ ORC schema parser with complex type support
    - Integrate with enhanced type inference system for improved type detection
    - Implement confidence scoring for format detection
 

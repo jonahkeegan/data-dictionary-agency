@@ -105,11 +105,11 @@ timestamp: 2025-04-26T10:30:00-07:00
         [json_schema]/ # JSON Schema parser
           __init__.py #[FD_JSON_SCHEMA] "JSON Schema parser" @patterns[Plugin] @index[formats]
         [openapi]/ # OpenAPI/Swagger parser
-          __init__.py #[FD_OPENAPI] "OpenAPI/Swagger parser" @patterns[Plugin] @index[formats]
+          __init__.py #[FD_OPENAPI] "OpenAPI/Swagger parser with comprehensive API structure extraction" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [orc]/ # ORC format parser
-          __init__.py #[FD_ORC_NEW] "ORC format parser" @patterns[Plugin] @index[formats]
+          __init__.py #[FD_ORC_NEW] "ORC format parser with complex type support" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [parquet]/ # Parquet format parser
-          __init__.py #[FD_PARQUET_NEW] "Parquet format parser" @patterns[Plugin] @index[formats]
+          __init__.py #[FD_PARQUET_NEW] "Parquet format parser with columnar data structure extraction" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [protobuf]/ # Protobuf format parser
           __init__.py #[FD_PROTOBUF] "Protocol Buffers parser with message, enum, service and map type support" @patterns[Plugin] @index[formats] @tasks[TASK_002] ✅
         [sql]/ # SQL format parser
