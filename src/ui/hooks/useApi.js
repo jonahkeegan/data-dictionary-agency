@@ -61,7 +61,6 @@ export const useApi = (apiFunction, dependencies = [], immediate = false) => {
     
     // No cleanup needed for immediate execution
   }, [execute, immediate]);
-  
   return { data, loading, error, execute, reset };
 };
 
@@ -85,6 +84,7 @@ export const useApi = (apiFunction, dependencies = [], immediate = false) => {
  * @property {Function} refresh - Function to refresh current page
  */
 export const usePaginatedApi = (apiFunction, initialParams = {}) => {
+
   // Default pagination parameters
   const defaultParams = {
     skip: 0,

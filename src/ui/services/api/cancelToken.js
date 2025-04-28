@@ -21,8 +21,7 @@ export const createCancelToken = (requestKey) => {
   
   // Create a new cancel token
   const source = axios.CancelToken.source();
-  pendingRequests.set(requestKey, source);
-  
+  pendingRequests.set(requestKey, source);  
   return source;
 };
 

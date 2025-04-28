@@ -12,7 +12,6 @@ import { getConfig } from '../../config';
  */
 export const createApiClient = (customConfig = {}) => {
   const config = getConfig();
-  
   const client = axios.create({
     baseURL: customConfig.baseURL || config.apiUrl,
     timeout: customConfig.timeout || config.timeout,
