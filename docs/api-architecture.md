@@ -135,7 +135,7 @@ console.log(`API URL: ${config.apiUrl}`);
 Key configuration options:
 
 | Option | Description | Default |
-|--------|-------------|---------||
+|--------|-------------|---------|
 | `apiUrl` | Base URL for API requests | `http://localhost:8000/api` (development) |
 | `timeout` | Request timeout in ms | `10000` (development) |
 | `retryCount` | Max number of retries | `3` (development) |

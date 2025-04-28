@@ -1,22 +1,18 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
-
-// API base URL
-const API_URL = '/api';
+import { RepositoryService } from '../../services/api/repositories';
+import { retryRequest } from '../../services/api/client';
 
 /**
  * Async thunk for fetching all repositories
  */
 export const fetchRepositories = createAsyncThunk(
   'repositories/fetchRepositories',
-  async (_, { rejectWithValue }) => {
+  async (params = {}, { rejectWithValue }) => {
     try {
-      const response = await axios.get(`${API_URL}/repositories`);
-      return response.data;
+      // Use retry mechanism for this critical operation
+      return await retryRequest(() => RepositoryService.getAll(params));
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Failed to fetch repositories'
-      );
+      return rejectWithValue(error.message || 'Failed to fetch repositories');
     }
   }
 );
@@ -28,12 +24,9 @@ export const fetchRepositoryById = createAsyncThunk(
   'repositories/fetchRepositoryById',
   async (repoId, { rejectWithValue }) => {
     try {
-      const response = await axios.get(`${API_URL}/repositories/${repoId}`);
-      return response.data;
+      return await RepositoryService.getById(repoId);
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Failed to fetch repository'
-      );
+      return rejectWithValue(error.message || 'Failed to fetch repository');
     }
   }
 );
@@ -45,12 +38,39 @@ export const addRepository = createAsyncThunk(
   'repositories/addRepository',
   async (repositoryData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_URL}/repositories`, repositoryData);
-      return response.data;
+      return await RepositoryService.create(repositoryData);
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Failed to add repository'
-      );
+      return rejectWithValue(error.message || 'Failed to add repository');
+    }
+  }
+);
+
+/**
+ * Async thunk for deleting a repository
+ */
+export const deleteRepository = createAsyncThunk(
+  'repositories/deleteRepository',
+  async (repoId, { rejectWithValue }) => {
+    try {
+      await RepositoryService.delete(repoId);
+      return repoId;
+    } catch (error) {
+      return rejectWithValue(error.message || 'Failed to delete repository');
+    }
+  }
+);
+
+/**
+ * Async thunk for triggering repository analysis
+ */
+export const triggerRepositoryAnalysis = createAsyncThunk(
+  'repositories/triggerAnalysis',
+  async (repoId, { rejectWithValue }) => {
+    try {
+      const result = await RepositoryService.triggerAnalysis(repoId);
+      return { id: repoId, result };
+    } catch (error) {
+      return rejectWithValue(error.message || 'Failed to trigger repository analysis');
     }
   }
 );
@@ -129,6 +149,52 @@ const repositoriesSlice = createSlice({
         state.error = null;
       })
       .addCase(addRepository.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload;
+      })
+      
+      // Delete repository
+      .addCase(deleteRepository.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(deleteRepository.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        state.repositories = state.repositories.filter(repo => repo.id !== action.payload);
+        if (state.currentRepository && state.currentRepository.id === action.payload) {
+          state.currentRepository = null;
+        }
+        state.error = null;
+      })
+      .addCase(deleteRepository.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload;
+      })
+      
+      // Trigger repository analysis
+      .addCase(triggerRepositoryAnalysis.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(triggerRepositoryAnalysis.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        
+        // Update repository status in the repositories array
+        const index = state.repositories.findIndex(
+          (repo) => repo.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.repositories[index].status = 'analyzing';
+          state.repositories[index].progress = 0;
+        }
+        
+        // Update current repository if it's the one being analyzed
+        if (state.currentRepository && state.currentRepository.id === action.payload.id) {
+          state.currentRepository.status = 'analyzing';
+          state.currentRepository.progress = 0;
+        }
+        
+        state.error = null;
+      })
+      .addCase(triggerRepositoryAnalysis.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload;
       });

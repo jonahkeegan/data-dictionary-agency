@@ -1,167 +1,297 @@
 /**
- * Schema Service
- * Handles API requests related to schemas
+ * Schema service for the Data Dictionary Agency frontend
+ * Provides methods for interacting with schema-related API endpoints
  */
-import { apiClient } from './client';
-import { generateRequestKey, createCancelToken } from './cancelToken';
+import BaseService from './baseService';
+import { createCancelToken, generateRequestKey } from './cancelToken';
 
 /**
- * Service for schema-related API operations
+ * @typedef {import('./baseService').ServiceOptions} ServiceOptions
  */
-export const SchemaService = {
+
+/**
+ * @typedef {Object} Schema
+ * @property {string} id - Schema ID
+ * @property {string} name - Schema name
+ * @property {string} description - Schema description
+ * @property {string} repository_id - Repository ID
+ * @property {string} format_id - Format ID
+ * @property {string} format_name - Format name
+ * @property {string} file_path - File path in repository
+ * @property {string} created_at - ISO 8601 creation timestamp
+ * @property {string} updated_at - ISO 8601 update timestamp
+ * @property {Object} content - Schema-specific content
+ */
+
+/**
+ * @typedef {Object} SchemaParams
+ * @property {string} [repository_id] - Filter by repository ID
+ * @property {string} [format_id] - Filter by format ID
+ * @property {number} [skip=0] - Number of items to skip
+ * @property {number} [limit=100] - Max number of items to return
+ * @property {string} [sort] - Field to sort by
+ * @property {string} [order] - Sort order ('asc' or 'desc')
+ */
+
+/**
+ * @typedef {Object} SchemaData
+ * @property {string} name - Schema name
+ * @property {string} description - Schema description
+ * @property {string} repository_id - Repository ID
+ * @property {string} [format_id] - Format ID
+ * @property {string} [file_path] - File path in repository
+ * @property {Object} [content] - Schema-specific content
+ */
+
+/**
+ * @typedef {Object} Relationship
+ * @property {string} id - Relationship ID
+ * @property {string} source_schema_id - Source schema ID
+ * @property {string} target_schema_id - Target schema ID
+ * @property {string} relationship_type - Relationship type
+ * @property {number} confidence - Confidence score (0-1)
+ * @property {Object} properties - Additional properties
+ */
+
+/**
+ * @typedef {Object} ExportResult
+ * @property {string} format - Export format
+ * @property {string} content - Exported content
+ */
+
+/**
+ * Schema service implementation
+ * @extends BaseService
+ */
+export class SchemaService extends BaseService {
   /**
-   * Get all schemas with optional filtering
-   * @param {Object} params - Query parameters for filtering
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Array>} Array of schemas
+   * Get all schemas with optional filtering and pagination
+   * 
+   * @async
+   * @param {SchemaParams} [params={}] - Query parameters
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Schema[]>} Array of schema objects
+   * @throws {Error} If the request fails
    */
-  getAll: async (params = {}, options = {}) => {
-    const requestKey = generateRequestKey('getSchemas', [params]);
+  async getAll(params = {}, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'getSchemas', [params]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    try {
+      // Use cached request
+      return await this.cachedGet('/schemas', params, options);
+    } catch (error) {
+      return this.handleError(error);
     }
-    
-    const response = await apiClient.get('/schemas', { 
-      params,
-      ...options 
-    });
-    
-    return response.data;
-  },
+  }
   
   /**
    * Get a schema by ID
+   * 
+   * @async
    * @param {string} id - Schema ID
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Schema details
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Schema>} Schema object
+   * @throws {Error} If the request fails
    */
-  getById: async (id, options = {}) => {
-    const requestKey = generateRequestKey('getSchemaById', [id]);
+  async getById(id, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'getSchemaById', [id]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    try {
+      // Use cached request
+      return await this.cachedGet(`/schemas/${id}`, {}, options);
+    } catch (error) {
+      return this.handleError(error);
     }
-    
-    const response = await apiClient.get(`/schemas/${id}`, options);
-    
-    return response.data;
-  },
+  }
   
   /**
-   * Get schemas for a repository
-   * @param {string} repositoryId - Repository ID
-   * @param {Object} params - Query parameters for filtering
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Array>} Array of schemas
+   * Create a new schema
+   * 
+   * @async
+   * @param {SchemaData} data - Schema data
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Schema>} Created schema object
+   * @throws {Error} If the request fails
    */
-  getByRepository: async (repositoryId, params = {}, options = {}) => {
-    const requestKey = generateRequestKey('getSchemasByRepository', [repositoryId, params]);
+  async create(data, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'createSchema', [data]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    // Invalidation patterns
+    const patterns = [
+      '^schemas($|\\?)', // All schemas
+      `^repositories/${data.repository_id}/schemas($|\\?)` // Repository schemas
+    ];
+    
+    try {
+      const result = await this.executePost('/schemas', data, options);
+      
+      // Invalidate cache for all patterns
+      if (this.cacheManager) {
+        patterns.forEach(pattern => {
+          this.cacheManager.invalidate(pattern);
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+  
+  /**
+   * Update a schema by ID
+   * 
+   * @async
+   * @param {string} id - Schema ID
+   * @param {SchemaData} data - Updated schema data
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Schema>} Updated schema object
+   * @throws {Error} If the request fails
+   */
+  async update(id, data, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'updateSchema', [id, data]);
+    
+    // Invalidation patterns
+    const patterns = [
+      '^schemas($|\\?)', // All schemas
+      `^schemas/${id}($|\\?)`, // Specific schema
+      `^schemas/${id}/relationships($|\\?)` // Relationships may be affected
+    ];
+    
+    if (data.repository_id) {
+      patterns.push(`^repositories/${data.repository_id}/schemas($|\\?)`);
     }
     
-    const response = await apiClient.get(`/repositories/${repositoryId}/schemas`, {
-      params,
-      ...options
-    });
+    try {
+      const result = await this.executePut(`/schemas/${id}`, data, options);
+      
+      // Invalidate cache for all patterns
+      if (this.cacheManager) {
+        patterns.forEach(pattern => {
+          this.cacheManager.invalidate(pattern);
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+  
+  /**
+   * Delete a schema by ID
+   * 
+   * @async
+   * @param {string} id - Schema ID
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<boolean>} True if deletion was successful
+   * @throws {Error} If the request fails
+   */
+  async delete(id, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'deleteSchema', [id]);
     
-    return response.data;
-  },
+    try {
+      // Get schema first to know repository_id for cache invalidation
+      const schema = await this.getById(id, { ...options, useCache: true });
+      
+      // Invalidation patterns
+      const patterns = [
+        '^schemas($|\\?)', // All schemas
+        `^schemas/${id}($|\\?)`, // Specific schema
+        `^schemas/${id}/relationships($|\\?)` // Relationships
+      ];
+      
+      if (schema && schema.repository_id) {
+        patterns.push(`^repositories/${schema.repository_id}/schemas($|\\?)`);
+      }
+      
+      await this.executeDelete(`/schemas/${id}`, options);
+      
+      // Invalidate cache for all patterns
+      if (this.cacheManager) {
+        patterns.forEach(pattern => {
+          this.cacheManager.invalidate(pattern);
+        });
+      }
+      
+      return true;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
   
   /**
    * Get relationships for a schema
+   * 
+   * @async
    * @param {string} id - Schema ID
-   * @param {Object} params - Query parameters for filtering
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Array>} Array of relationships
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Relationship[]>} Array of relationship objects
+   * @throws {Error} If the request fails
    */
-  getRelationships: async (id, params = {}, options = {}) => {
-    const requestKey = generateRequestKey('getSchemaRelationships', [id, params]);
+  async getRelationships(id, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'getSchemaRelationships', [id]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    try {
+      // Use cached request with specific TTL for relationships
+      return await this.cachedGet(
+        `/schemas/${id}/relationships`, 
+        {}, 
+        { ...options, ttl: 300 } // 5 minutes TTL
+      );
+    } catch (error) {
+      return this.handleError(error);
     }
-    
-    const response = await apiClient.get(`/schemas/${id}/relationships`, {
-      params,
-      ...options
-    });
-    
-    return response.data;
-  },
-  
-  /**
-   * Get fields for a schema
-   * @param {string} id - Schema ID
-   * @param {Object} params - Query parameters for filtering
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Array>} Array of fields
-   */
-  getFields: async (id, params = {}, options = {}) => {
-    const requestKey = generateRequestKey('getSchemaFields', [id, params]);
-    
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
-    }
-    
-    const response = await apiClient.get(`/schemas/${id}/fields`, {
-      params,
-      ...options
-    });
-    
-    return response.data;
-  },
-  
-  /**
-   * Update a schema
-   * @param {string} id - Schema ID
-   * @param {Object} data - Schema data to update
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Updated schema
-   */
-  update: async (id, data, options = {}) => {
-    const requestKey = generateRequestKey('updateSchema', [id, data]);
-    
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
-    }
-    
-    const response = await apiClient.put(`/schemas/${id}`, data, options);
-    
-    return response.data;
-  },
-  
-  /**
-   * Delete a schema
-   * @param {string} id - Schema ID
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<boolean>} Success status
-   */
-  delete: async (id, options = {}) => {
-    const requestKey = generateRequestKey('deleteSchema', [id]);
-    
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
-    }
-    
-    await apiClient.delete(`/schemas/${id}`, options);
-    
-    return true;
   }
-};
+  
+  /**
+   * Export a schema to a specific format
+   * 
+   * @async
+   * @param {string} id - Schema ID
+   * @param {string} [format='json'] - Export format (json, yaml, sql, etc.)
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<ExportResult>} Exported schema data
+   * @throws {Error} If the request fails
+   */
+  async export(id, format = 'json', options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'exportSchema', [id, format]);
+    
+    try {
+      const response = await this.apiClient.post(
+        `/schemas/${id}/export`, 
+        null, 
+        {
+          params: { format },
+          ...options
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+  
+  /**
+   * Setup cancel token if not provided
+   * @private
+   * @param {ServiceOptions} options - Request options
+   * @param {string} requestType - Request type for key generation
+   * @param {Array} params - Request parameters
+   */
+  setupCancelToken(options, requestType, params) {
+    if (!options.cancelToken) {
+      const requestKey = generateRequestKey(requestType, params);
+      const source = createCancelToken(requestKey);
+      options.cancelToken = source.token;
+    }
+  }
+}

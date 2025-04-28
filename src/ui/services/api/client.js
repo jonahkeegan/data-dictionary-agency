@@ -1,150 +1,118 @@
 /**
- * API Client
- * Centralized API client for the Data Dictionary Agency frontend
+ * API client for the Data Dictionary Agency frontend
+ * Provides centralized axios instance with interceptors for authentication and error handling
  */
 import axios from 'axios';
 import { getConfig } from '../../config';
 
 /**
- * Creates an Axios API client with the provided configuration
- * @param {Object} customConfig - Custom configuration to override defaults
- * @returns {AxiosInstance} Configured Axios instance
+ * Create a configured axios instance
+ * @param {Object} customConfig - Optional custom configuration
+ * @returns {Object} Configured axios instance
  */
 export const createApiClient = (customConfig = {}) => {
   const config = getConfig();
-  
-  // Create axios instance with default configuration
   const client = axios.create({
     baseURL: customConfig.baseURL || config.apiUrl,
     timeout: customConfig.timeout || config.timeout,
     headers: {
       'Content-Type': 'application/json',
-      ...customConfig.headers
-    },
-    ...customConfig
+      ...customConfig.headers,
+    }
   });
-  
-  // Request interceptor
+
+  // Add request interceptors
   client.interceptors.request.use(
-    (config) => {
-      // Get token from localStorage if it exists
+    (requestConfig) => {
+      // Add authentication header if token exists
       const token = localStorage.getItem('auth_token');
       if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+        requestConfig.headers.Authorization = `Bearer ${token}`;
       }
       
-      // Log requests in development mode
-      if (process.env.NODE_ENV === 'development' && config.logLevel === 'debug') {
-        console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`, config);
+      // Log requests in development
+      if (config.logLevel === 'debug' && process.env.NODE_ENV !== 'production') {
+        console.log(`API Request: ${requestConfig.method.toUpperCase()} ${requestConfig.baseURL}${requestConfig.url}`, {
+          data: requestConfig.data,
+          params: requestConfig.params
+        });
       }
       
-      return config;
+      return requestConfig;
     },
     (error) => {
+      // Handle request configuration errors
+      console.error('API Request Error:', error);
       return Promise.reject(error);
     }
   );
-  
-  // Response interceptor
+
+  // Add response interceptors
   client.interceptors.response.use(
     (response) => {
-      // Log responses in development mode
-      if (process.env.NODE_ENV === 'development' && config.logLevel === 'debug') {
-        console.log(`API Response: ${response.config.method.toUpperCase()} ${response.config.url}`, response);
+      // Log successful responses in development
+      if (config.logLevel === 'debug' && process.env.NODE_ENV !== 'production') {
+        console.log(`API Response: ${response.config.method.toUpperCase()} ${response.config.url} ${response.status}`, {
+          data: response.data
+        });
       }
       
       return response;
     },
     (error) => {
-      return Promise.reject(handleApiError(error));
+      // Transform error response
+      return handleApiError(error);
     }
   );
-  
+
   return client;
 };
 
-// Create default client
+/**
+ * Global default client instance
+ */
 export const apiClient = createApiClient();
 
 /**
- * Transforms API errors into a standardized format
- * @param {Error} error - The error object from the API call
- * @returns {Object} Standardized error object
+ * Transform API errors into a standardized format
+ * @param {Object} error - Axios error object
+ * @returns {Promise} Rejected promise with standardized error
  */
 export const handleApiError = (error) => {
-  // Initialize flags for error type
-  const enhancedError = {
-    isNetworkError: false,
-    isServerError: false,
-    isClientError: false,
-    isAuthError: false,
-    original: error
+  const config = getConfig();
+  
+  // Extract response data
+  const response = error.response || {};
+  const status = response.status || 0;
+  const data = response.data || {};
+  
+  // Standard error response
+  const standardError = {
+    status,
+    message: data.detail || data.message || error.message || 'Unknown error occurred',
+    code: data.code || status,
+    errors: data.errors || [],
+    originalError: error,
   };
-  
-  // Handle axios cancellation errors
-  if (axios.isCancel(error)) {
-    enhancedError.isCancelled = true;
-    enhancedError.message = 'Request was cancelled';
-    return enhancedError;
+
+  // Log error for debugging
+  if (config.logLevel === 'debug' || process.env.NODE_ENV !== 'production') {
+    console.error('API Error:', standardError);
   }
   
-  // Handle network errors (no response from server)
-  if (!error.response) {
-    enhancedError.isNetworkError = true;
-    enhancedError.message = 'Network error - unable to connect to the server';
-    console.error('Network Error:', error);
-    return enhancedError;
-  }
+  // Add metadata for handling special cases
+  standardError.isNetworkError = !error.response;
+  standardError.isServerError = status >= 500 && status < 600;
+  standardError.isClientError = status >= 400 && status < 500;
+  standardError.isAuthError = status === 401 || status === 403;
   
-  // Get the status code
-  const status = error.response.status;
-  enhancedError.status = status;
-  
-  // Client errors (4xx)
-  if (status >= 400 && status < 500) {
-    enhancedError.isClientError = true;
-    
-    // Special handling for authentication errors
-    if (status === 401 || status === 403) {
-      enhancedError.isAuthError = true;
-    }
-  }
-  
-  // Server errors (5xx)
-  if (status >= 500) {
-    enhancedError.isServerError = true;
-  }
-  
-  // Extract error details from response
-  const responseData = error.response.data;
-  
-  // Handle different error formats from the backend
-  if (responseData) {
-    // Try to get standardized error fields
-    enhancedError.message = responseData.detail || responseData.message || responseData.error || 'An error occurred';
-    enhancedError.code = responseData.code || responseData.error_code;
-    enhancedError.errors = responseData.errors || [];
-  } else {
-    enhancedError.message = error.message || 'An error occurred';
-  }
-  
-  // Log the error in development
-  if (process.env.NODE_ENV === 'development') {
-    console.error('API Error:', {
-      status,
-      url: error.config?.url,
-      message: enhancedError.message,
-      details: responseData
-    });
-  }
-  
-  return enhancedError;
+  return Promise.reject(standardError);
 };
 
 /**
- * Determines if an error is retryable
- * @param {Object} error - Enhanced error object from handleApiError
- * @returns {boolean} Whether the error is retryable
+ * Determine if an error should trigger a retry
+ * @param {Object} error - Standardized error object
+ * @returns {boolean} Whether the request should be retried
  */
 export const isRetryable = (error) => {
   // Network errors are retryable
@@ -152,65 +120,40 @@ export const isRetryable = (error) => {
     return true;
   }
   
-  // Server errors are retryable
-  if (error.isServerError) {
-    return true;
-  }
-  
-  // Client errors are not retryable (invalid request, not found, etc.)
-  if (error.isClientError) {
-    return false;
-  }
-  
-  // By default, don't retry
-  return false;
+  // Server errors (5xx) are retryable
+  return error.isServerError;
 };
 
 /**
- * Retries a failed API call with exponential backoff
+ * Retry a failed request with exponential backoff
  * @param {Function} apiCall - Function that returns a promise for the API call
- * @param {number} [maxRetries=null] - Maximum number of retries (null = use config)
- * @returns {Promise} Promise that resolves with the API response
+ * @param {number} maxRetries - Maximum number of retries (defaults to config value)
+ * @returns {Promise} Result of API call or last error
  */
 export const retryRequest = async (apiCall, maxRetries = null) => {
   const config = getConfig();
-  const maxAttempts = maxRetries !== null ? maxRetries + 1 : config.retryCount + 1;
-  let lastError = null;
+  const retries = maxRetries !== null ? maxRetries : config.retryCount;
+  let retryCount = 0;
   
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  while (retryCount <= retries) {
     try {
       return await apiCall();
     } catch (error) {
-      lastError = error;
+      retryCount++;
       
-      // Don't retry if it's not a retryable error
-      if (!isRetryable(error)) {
+      // If reached max retries or error is not retryable, throw
+      if (retryCount > retries || !isRetryable(error)) {
         throw error;
       }
       
-      // Don't retry on the last attempt
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-      
-      // Calculate backoff delay with exponential backoff and jitter
-      const baseDelay = 300; // Base delay in milliseconds
-      const maxDelay = 3000; // Maximum delay in milliseconds
-      const exponentialDelay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt - 1));
-      const jitter = Math.random() * 0.3 * exponentialDelay; // Add up to 30% jitter
-      const delay = exponentialDelay + jitter;
-      
-      // Log retry attempt in development
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`API retry attempt ${attempt}/${maxAttempts - 1} after ${Math.round(delay)}ms`);
-      }
-      
-      // Wait before next retry
+      // Exponential backoff: wait longer for each retry
+      const delay = Math.pow(2, retryCount) * 300;
       await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Log retry attempt
+      if (config.logLevel === 'debug') {
+        console.log(`Retrying request (${retryCount}/${retries})...`);
+      }
     }
   }
-  
-  // This should never be reached due to the throw in the loop,
-  // but is here for completeness
-  throw lastError;
 };

@@ -385,6 +385,421 @@ const fetchData = async () => {
 };
 ```
 
+## Frontend API Patterns
+
+### API Client Architecture
+The frontend uses a comprehensive, centralized API client architecture with advanced features:
+
+```mermaid
+flowchart TD
+    subgraph "API Client Layer"
+        Config[Configuration] --> ClientFactory[API Client Factory]
+        ClientFactory --> Client[Base Axios Client]
+        Client --> RequestInterceptors[Request Interceptors]
+        Client --> ResponseInterceptors[Response Interceptors]
+        Client --> ErrorHandler[Error Handler]
+        Client --> CircuitBreaker[Circuit Breaker]
+    end
+    
+    subgraph "Service Layer"
+        Client --> BaseService[Base Service]
+        BaseService --> RepoService[Repository Service]
+        BaseService --> SchemaService[Schema Service]
+        BaseService --> FormatService[Format Service]
+        BaseService --> AuthService[Auth Service]
+        
+        CacheManager[Cache Manager] --- BaseService
+    end
+    
+    subgraph "Mock Service Layer"
+        MockServiceFactory[Mock Service Factory]
+        MockServiceFactory --> MockRepoService[Mock Repository Service]
+        MockServiceFactory --> MockSchemaService[Mock Schema Service]
+        MockServiceFactory --> MockFormatService[Mock Format Service]
+        MockServiceFactory --> MockAuthService[Mock Auth Service]
+        MockDataStore[Mock Data Store] --- MockServiceFactory
+    end
+    
+    subgraph "Service Factory"
+        EnvConfig[Environment Config] --> ServiceFactory[Service Factory]
+        ServiceFactory --> RepoService
+        ServiceFactory --> SchemaService
+        ServiceFactory --> FormatService
+        ServiceFactory --> AuthService
+        ServiceFactory -.-> MockServiceFactory
+    end
+    
+    subgraph "Integration Layer"
+        RepoService & SchemaService & FormatService & AuthService --> CustomHooks[Custom React Hooks]
+        CustomHooks --> ReactComponents[React Components]
+        CustomHooks --> ReduxThunks[Redux Thunks]
+    end
+```
+
+### Service Abstraction Pattern
+API endpoints are abstracted through service modules:
+
+```javascript
+// Repository service example
+export const RepositoryService = {
+  getAll: async (params = {}, options = {}) => {
+    const requestKey = generateRequestKey('getRepositories', [params]);
+    
+    // If no cancel token provided, create one
+    if (!options.cancelToken) {
+      const source = createCancelToken(requestKey);
+      options.cancelToken = source.token;
+    }
+    
+    const response = await apiClient.get('/repositories', { 
+      params,
+      ...options 
+    });
+    
+    return response.data;
+  },
+  
+  getById: async (id, options = {}) => {
+    // Implementation...
+  },
+  
+  // Additional methods...
+};
+```
+
+### Request Cancellation Pattern
+Request cancellation is managed through cancel tokens:
+
+```javascript
+// Cancel token usage example
+const source = createCancelToken('my-request');
+
+// Make cancellable request
+apiClient.get('/long-running-operation', {
+  cancelToken: source.token
+});
+
+// Cancel the request if needed
+cancelPendingRequest('my-request');
+```
+
+### Custom Hooks Pattern
+Custom hooks abstract API interaction for components:
+
+```jsx
+// Custom hook for API calls
+export const useApi = (apiFunction, dependencies = [], immediate = false) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Execute API call
+  const execute = useCallback(async (...args) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiFunction(...args);
+      setData(response);
+      return response;
+    } catch (error) {
+      if (!isCancel(error)) {
+        setError(error);
+      }
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFunction]);
+  
+  // Effect for immediate execution and cleanup
+  useEffect(() => {
+    let mounted = true;
+    
+    if (immediate) {
+      execute().catch(error => {
+        // Handle errors...
+      });
+    }
+    
+    return () => {
+      mounted = false;
+      // Cancel pending requests on unmount
+    };
+  }, dependencies);
+  
+  return { data, loading, error, execute };
+};
+
+// Usage example
+const RepositoryList = () => {
+  const { data, loading, error } = useApi(
+    () => RepositoryService.getAll(),
+    [],
+    true
+  );
+  
+  if (loading) return <Spinner />;
+  if (error) return <ErrorMessage error={error} />;
+  
+  return (
+    <List>
+      {data.map(repo => (
+        <ListItem key={repo.id}>{repo.name}</ListItem>
+      ))}
+    </List>
+  );
+};
+```
+
+### Advanced Caching Pattern
+The application uses a sophisticated caching system with TTL and pattern-based invalidation:
+
+```javascript
+// Cache manager implementation with TTL
+export class CacheManager {
+  constructor(options = {}) {
+    this.cache = new Map();
+    this.defaultTTL = options.defaultTTL || 300; // 5 minutes default
+    this.maxEntries = options.maxEntries || 100;
+    this.stats = { hits: 0, misses: 0 };
+  }
+  
+  // Get item from cache
+  get(path, params = {}) {
+    const key = this._generateCacheKey(path, params);
+    const entry = this.cache.get(key);
+    
+    if (!entry) {
+      this.stats.misses++;
+      return null;
+    }
+    
+    // Check if entry has expired
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      this.stats.misses++;
+      return null;
+    }
+    
+    this.stats.hits++;
+    return entry.data;
+  }
+  
+  // Store item in cache
+  set(path, params = {}, data, ttl) {
+    const key = this._generateCacheKey(path, params);
+    const expiresAt = Date.now() + (ttl || this.defaultTTL) * 1000;
+    
+    // If cache is full, remove oldest entry
+    if (this.cache.size >= this.maxEntries) {
+      const oldestKey = [...this.cache.keys()][0];
+      this.cache.delete(oldestKey);
+    }
+    
+    this.cache.set(key, { data, expiresAt });
+    return true;
+  }
+  
+  // Invalidate cache entries by pattern
+  invalidate(pattern) {
+    const regex = new RegExp(pattern);
+    let count = 0;
+    
+    for (const key of this.cache.keys()) {
+      if (regex.test(key)) {
+        this.cache.delete(key);
+        count++;
+      }
+    }
+    
+    return count;
+  }
+  
+  // Generate cache key from path and params
+  _generateCacheKey(path, params) {
+    return `${path}:${JSON.stringify(params)}`;
+  }
+  
+  // Clear entire cache
+  clear() {
+    const size = this.cache.size;
+    this.cache.clear();
+    return size;
+  }
+  
+  // Get cache statistics
+  getStats() {
+    return {
+      ...this.stats,
+      size: this.cache.size,
+      hitRate: this.stats.hits / (this.stats.hits + this.stats.misses) || 0
+    };
+  }
+}
+```
+
+Usage example:
+
+```javascript
+// Service using cache manager
+export class RepositoryService extends BaseService {
+  constructor(apiClient, options = {}) {
+    super(apiClient, options);
+    this.defaultTTL = options.defaultTTL || 600; // 10 minutes for repositories
+  }
+  
+  async getAll(params = {}, options = {}) {
+    // Skip cache if explicitly requested
+    if (options.useCache !== false && this.cacheManager) {
+      const cached = this.cacheManager.get('/repositories', params);
+      if (cached) {
+        return cached;
+      }
+    }
+    
+    const data = await this._request('/repositories', 'GET', { params });
+    
+    // Store in cache if not disabled
+    if (options.useCache !== false && this.cacheManager) {
+      this.cacheManager.set('/repositories', params, data, options.ttl || this.defaultTTL);
+    }
+    
+    return data;
+  }
+  
+  // When updating a repository, invalidate related cache entries
+  async update(id, data, options = {}) {
+    const result = await this._request(`/repositories/${id}`, 'PUT', { data });
+    
+    // Invalidate cache entries matching patterns
+    if (this.cacheManager) {
+      this.cacheManager.invalidate(`^/repositories($|\\?)`); // All repositories list
+      this.cacheManager.invalidate(`^/repositories/${id}($|\\?)`); // Specific repository
+      this.cacheManager.invalidate(`^/schemas\\?.*repository_id=${id}`); // Related schemas
+    }
+    
+    return result;
+  }
+}
+```
+
+### Centralized Mock Service Pattern
+Development is accelerated through centralized mock services with realistic data:
+
+```javascript
+// Mock service factory
+export class MockServiceFactory {
+  constructor(options = {}) {
+    this.delay = options.delay || 800;
+    this.errorRate = options.errorRate || 0;
+    this.dataStore = new MockDataStore();
+  }
+  
+  // Get repository service mock
+  getRepositoryService() {
+    return new MockRepositoryService(this.dataStore, {
+      delay: this.delay,
+      errorRate: this.errorRate
+    });
+  }
+  
+  // Get schema service mock
+  getSchemaService() {
+    return new MockSchemaService(this.dataStore, {
+      delay: this.delay,
+      errorRate: this.errorRate
+    });
+  }
+  
+  // Get format service mock
+  getFormatService() {
+    return new MockFormatService(this.dataStore, {
+      delay: this.delay,
+      errorRate: this.errorRate
+    });
+  }
+  
+  // Get auth service mock
+  getAuthService() {
+    return new MockAuthService(this.dataStore, {
+      delay: this.delay,
+      errorRate: this.errorRate
+    });
+  }
+  
+  // Configure mock behavior
+  configure(options) {
+    if (options.delay !== undefined) this.delay = options.delay;
+    if (options.errorRate !== undefined) this.errorRate = options.errorRate;
+    if (options.seed) this.dataStore.seed(options.seed);
+  }
+}
+
+// Mock repository service example
+export class MockRepositoryService {
+  constructor(dataStore, options = {}) {
+    this.dataStore = dataStore;
+    this.delay = options.delay || 800;
+    this.errorRate = options.errorRate || 0;
+  }
+  
+  async getAll(params = {}) {
+    await this._simulateNetworkDelay();
+    
+    // Simulate random error if errorRate > 0
+    if (Math.random() < this.errorRate) {
+      throw new Error("Network error");
+    }
+    
+    let repositories = [...this.dataStore.repositories];
+    
+    // Apply filtering
+    if (params.status) {
+      repositories = repositories.filter(repo => repo.status === params.status);
+    }
+    
+    // Apply sorting
+    if (params.sort) {
+      repositories.sort((a, b) => {
+        const direction = params.order === 'desc' ? -1 : 1;
+        return direction * (a[params.sort] > b[params.sort] ? 1 : -1);
+      });
+    }
+    
+    // Apply pagination
+    const skip = params.skip || 0;
+    const limit = params.limit || repositories.length;
+    
+    return {
+      data: repositories.slice(skip, skip + limit),
+      meta: {
+        total: repositories.length,
+        skip: skip,
+        limit: limit
+      }
+    };
+  }
+  
+  async getById(id) {
+    await this._simulateNetworkDelay();
+    
+    const repository = this.dataStore.repositories.find(repo => repo.id === id);
+    
+    if (!repository) {
+      throw { status: 404, message: "Repository not found" };
+    }
+    
+    return { data: repository };
+  }
+  
+  // More methods...
+  
+  async _simulateNetworkDelay() {
+    return new Promise(resolve => setTimeout(resolve, this.delay));
+  }
+}
+
 ## Security Patterns
 
 ### Authentication Middleware

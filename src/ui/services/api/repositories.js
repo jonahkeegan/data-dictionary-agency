@@ -1,155 +1,186 @@
 /**
- * Repository Service
- * Handles API requests related to repositories
+ * Repository service for the Data Dictionary Agency frontend
+ * Provides methods for interacting with repository-related API endpoints
  */
-import { apiClient } from './client';
-import { generateRequestKey, createCancelToken } from './cancelToken';
+import BaseService from './baseService';
+import { createCancelToken, generateRequestKey } from './cancelToken';
 
 /**
- * Service for repository-related API operations
+ * @typedef {import('./baseService').ServiceOptions} ServiceOptions
  */
-export const RepositoryService = {
+
+/**
+ * @typedef {Object} Repository
+ * @property {string} id - Repository ID
+ * @property {string} name - Repository name
+ * @property {string} description - Repository description
+ * @property {string} url - Repository URL
+ * @property {string} status - Repository status
+ * @property {number} progress - Analysis progress (0-100)
+ * @property {string} created_at - ISO 8601 creation timestamp
+ * @property {string} updated_at - ISO 8601 update timestamp
+ */
+
+/**
+ * @typedef {Object} RepositoryParams
+ * @property {number} [skip=0] - Number of items to skip
+ * @property {number} [limit=100] - Max number of items to return
+ * @property {string} [sort] - Field to sort by
+ * @property {string} [order] - Sort order ('asc' or 'desc')
+ */
+
+/**
+ * @typedef {Object} RepositoryData
+ * @property {string} name - Repository name
+ * @property {string} description - Repository description
+ * @property {string} url - Repository URL
+ */
+
+/**
+ * @typedef {Object} AnalysisResult
+ * @property {string} id - Analysis job ID
+ * @property {string} status - Analysis status
+ * @property {number} progress - Analysis progress (0-100)
+ */
+
+/**
+ * Repository service implementation
+ * @extends BaseService
+ */
+export class RepositoryService extends BaseService {
   /**
-   * Get all repositories with optional filtering
-   * @param {Object} params - Query parameters for filtering
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Array>} Array of repositories
+   * Get all repositories with optional filtering and pagination
+   * 
+   * @async
+   * @param {RepositoryParams} [params={}] - Query parameters
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Repository[]>} Array of repository objects
+   * @throws {Error} If the request fails
    */
-  getAll: async (params = {}, options = {}) => {
-    const requestKey = generateRequestKey('getRepositories', [params]);
+  async getAll(params = {}, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'getRepositories', [params]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    try {
+      // Use cached request
+      return await this.cachedGet('/repositories', params, options);
+    } catch (error) {
+      return this.handleError(error);
     }
-    
-    const response = await apiClient.get('/repositories', { 
-      params,
-      ...options 
-    });
-    
-    return response.data;
-  },
+  }
   
   /**
    * Get a repository by ID
+   * 
+   * @async
    * @param {string} id - Repository ID
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Repository details
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Repository>} Repository object
+   * @throws {Error} If the request fails
    */
-  getById: async (id, options = {}) => {
-    const requestKey = generateRequestKey('getRepositoryById', [id]);
+  async getById(id, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'getRepositoryById', [id]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    try {
+      // Use cached request
+      return await this.cachedGet(`/repositories/${id}`, {}, options);
+    } catch (error) {
+      return this.handleError(error);
     }
-    
-    const response = await apiClient.get(`/repositories/${id}`, options);
-    
-    return response.data;
-  },
+  }
   
   /**
    * Create a new repository
-   * @param {Object} data - Repository data
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Created repository
+   * 
+   * @async
+   * @param {RepositoryData} data - Repository data
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<Repository>} Created repository object
+   * @throws {Error} If the request fails
    */
-  create: async (data, options = {}) => {
-    const requestKey = generateRequestKey('createRepository', [data]);
+  async create(data, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'createRepository', [data]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
-    }
-    
-    const response = await apiClient.post('/repositories', data, options);
-    
-    return response.data;
-  },
+    // Execute POST with cache invalidation
+    return this.executePost(
+      '/repositories', 
+      data, 
+      options, 
+      '^repositories($|\\?)'
+    );
+  }
   
   /**
-   * Update a repository
+   * Delete a repository by ID
+   * 
+   * @async
    * @param {string} id - Repository ID
-   * @param {Object} data - Repository data to update
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Updated repository
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<boolean>} True if deletion was successful
+   * @throws {Error} If the request fails
    */
-  update: async (id, data, options = {}) => {
-    const requestKey = generateRequestKey('updateRepository', [id, data]);
+  async delete(id, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'deleteRepository', [id]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
+    // Create invalidation patterns
+    const patterns = [
+      '^repositories($|\\?)', // List endpoint
+      `^repositories/${id}($|\\?)` // Specific repository
+    ];
+    
+    try {
+      await this.executeDelete(`/repositories/${id}`, options);
+      
+      // Invalidate cache for both patterns
+      if (this.cacheManager) {
+        patterns.forEach(pattern => {
+          this.cacheManager.invalidate(pattern);
+        });
+      }
+      
+      return true;
+    } catch (error) {
+      return this.handleError(error);
     }
-    
-    const response = await apiClient.put(`/repositories/${id}`, data, options);
-    
-    return response.data;
-  },
-  
-  /**
-   * Delete a repository
-   * @param {string} id - Repository ID
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<boolean>} Success status
-   */
-  delete: async (id, options = {}) => {
-    const requestKey = generateRequestKey('deleteRepository', [id]);
-    
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
-    }
-    
-    await apiClient.delete(`/repositories/${id}`, options);
-    
-    return true;
-  },
+  }
   
   /**
    * Trigger analysis for a repository
+   * 
+   * @async
    * @param {string} id - Repository ID
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Analysis status
+   * @param {ServiceOptions} [options={}] - Request options
+   * @returns {Promise<AnalysisResult>} Analysis result
+   * @throws {Error} If the request fails
    */
-  triggerAnalysis: async (id, options = {}) => {
-    const requestKey = generateRequestKey('triggerRepositoryAnalysis', [id]);
+  async triggerAnalysis(id, options = {}) {
+    // Create cancel token if not provided
+    this.setupCancelToken(options, 'triggerRepositoryAnalysis', [id]);
     
-    // If no cancel token provided, create one
-    if (!options.cancelToken) {
-      const source = createCancelToken(requestKey);
-      options.cancelToken = source.token;
-    }
-    
-    const response = await apiClient.post(`/repositories/${id}/analyze`, null, options);
-    
-    return response.data;
-  },
+    // Invalidate repository data when triggering analysis
+    return this.executePost(
+      `/repositories/${id}/analyze`, 
+      null, 
+      options, 
+      `^repositories/${id}($|\\?)`
+    );
+  }
   
   /**
-   * Get analysis status for a repository
-   * @param {string} id - Repository ID
-   * @param {Object} options - Additional options for the request
-   * @returns {Promise<Object>} Analysis status
+   * Setup cancel token if not provided
+   * @private
+   * @param {ServiceOptions} options - Request options
+   * @param {string} requestType - Request type for key generation
+   * @param {Array} params - Request parameters
    */
-  getAnalysisStatus: async (id, options = {}) => {
-    const requestKey = generateRequestKey('getRepositoryAnalysisStatus', [id]);
-    
-    // If no cancel token provided, create one
+  setupCancelToken(options, requestType, params) {
     if (!options.cancelToken) {
+      const requestKey = generateRequestKey(requestType, params);
       const source = createCancelToken(requestKey);
       options.cancelToken = source.token;
     }
-    
-    const response = await apiClient.get(`/repositories/${id}/analyze/status`, options);
-    
-    return response.data;
   }
-};
+}
