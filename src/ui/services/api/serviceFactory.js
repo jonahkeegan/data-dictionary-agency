@@ -1,161 +1,184 @@
 /**
- * Service factory for creating and managing service instances
- * Provides a centralized point for accessing API services
+ * Service Factory
+ * 
+ * Central factory for creating and managing service instances.
+ * Provides singleton instances of each domain service with
+ * configuration options and environment-aware behavior.
  */
-import { createApiClient } from './client';
-import BaseService from './baseService';
-import { RepositoryService } from './repositories';
-import { SchemaService } from './schemas';
 
-// Import utils and mock services
-import { shouldUseMockServices } from '../../utils/common';
-import mockServiceFactory from '../mock/mockServiceFactory'; 
+import { isMockEnabled } from './config';
+
+// Service instance cache
+const serviceInstances = new Map();
+
+// Import actual service implementations
+// These will be imported and initialized lazily
+let repositoryServiceImpl;
+let schemaServiceImpl;
+let formatServiceImpl;
+let authServiceImpl;
+
+// Import mock service implementations
+// These will be imported and initialized lazily
+let mockRepositoryServiceImpl;
+let mockSchemaServiceImpl;
+let mockFormatServiceImpl;
+let mockAuthServiceImpl;
 
 /**
- * Service factory for creating and managing service instances
+ * Lazy load a module to improve initial loading performance
+ * @param {Function} importFn - Function that returns an import promise
+ * @returns {Promise} Promise resolving to the imported module
  */
-class ServiceFactory {
-  /**
-   * Singleton instance
-   * @type {ServiceFactory}
-   * @private
-   */
-  static instance = null;
+const lazyLoad = async (importFn) => {
+  try {
+    const module = await importFn();
+    return module.default || module;
+  } catch (error) {
+    console.error('Failed to lazy load service:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get a service instance, creating it if it doesn't exist
+ * @param {string} serviceType - Type of service to get
+ * @param {Function} createFn - Function to create the service if needed
+ * @param {boolean} [useMock=false] - Whether to use the mock implementation
+ * @returns {Object} Service instance
+ */
+const getServiceInstance = (serviceType, createFn, useMock = false) => {
+  const key = `${serviceType}${useMock ? ':mock' : ''}`;
   
-  /**
-   * Create a new service factory
-   * @private
-   */
-  constructor() {
-    this.apiClient = createApiClient();
-    this.services = new Map();
-    this.mockMode = shouldUseMockServices();
+  if (!serviceInstances.has(key)) {
+    serviceInstances.set(key, createFn());
   }
   
+  return serviceInstances.get(key);
+};
+
+/**
+ * Service Factory - provides access to all API services
+ */
+export const serviceFactory = {
   /**
-   * Get singleton instance of service factory
-   * @returns {ServiceFactory} Service factory instance
+   * Get an instance of the repository service
+   * @param {boolean} [options.forceMock] - Force using mock service
+   * @param {boolean} [options.forceReal] - Force using real service
+   * @returns {Object} Repository service instance
    */
-  static getInstance() {
-    if (!ServiceFactory.instance) {
-      ServiceFactory.instance = new ServiceFactory();
-    }
-    return ServiceFactory.instance;
-  }
-  
-  /**
-   * Get repository service
-   * @returns {import('./repositories').RepositoryService} Repository service
-   */
-  getRepositoryService() {
-    if (!this.services.has('repository')) {
-      const service = this.mockMode
-        ? mockServiceFactory.getRepositoryService()
-        : new RepositoryService(this.apiClient, {
-            defaultTTL: 600 // 10 minutes for repositories
-          });
-      this.services.set('repository', service);
-    }
-    return this.services.get('repository');
-  }
-  
-  /**
-   * Get schema service
-   * @returns {import('./schemas').SchemaService} Schema service
-   */
-  getSchemaService() {
-    if (!this.services.has('schema')) {
-      const service = this.mockMode
-        ? mockServiceFactory.getSchemaService()
-        : new SchemaService(this.apiClient, {
-            defaultTTL: 300 // 5 minutes for schemas
-          });
-      this.services.set('schema', service);
-    }
-    return this.services.get('schema');
-  }
-  
-  /**
-   * Get format service
-   * @returns {import('./formats').FormatService} Format service
-   */
-  getFormatService() {
-    if (!this.services.has('format')) {
-      // Lazy import to prevent circular dependencies
-      const { FormatService } = require('./formats');
+  getRepositoryService: (options = {}) => {
+    const useMock = options.forceMock || (isMockEnabled() && !options.forceReal);
+
+    return getServiceInstance('repository', async () => {
+      if (useMock) {
+        if (!mockRepositoryServiceImpl) {
+          mockRepositoryServiceImpl = await lazyLoad(() => 
+            import('../mock/mockRepositoryService')
+          );
+        }
+        return new mockRepositoryServiceImpl();
+      } 
       
-      const service = this.mockMode
-        ? mockServiceFactory.getFormatService()
-        : new FormatService(this.apiClient, {
-            defaultTTL: 1800 // 30 minutes for formats
-          });
-      this.services.set('format', service);
-    }
-    return this.services.get('format');
-  }
-  
-  /**
-   * Get authentication service
-   * @returns {import('./auth').AuthService} Authentication service
-   */
-  getAuthService() {
-    if (!this.services.has('auth')) {
-      // Lazy import to prevent circular dependencies
-      const { AuthService } = require('./auth');
-      
-      const service = this.mockMode
-        ? mockServiceFactory.getAuthService()
-        : new AuthService(this.apiClient, {
-            defaultTTL: 120 // 2 minutes for auth
-          });
-      this.services.set('auth', service);
-    }
-    return this.services.get('auth');
-  }
-  
-  /**
-   * Clear all service caches
-   */
-  clearCache() {
-    this.services.forEach(service => {
-      if (service.clearCache) {
-        service.clearCache();
+      if (!repositoryServiceImpl) {
+        repositoryServiceImpl = await lazyLoad(() => 
+          import('./repositoryService')
+        );
       }
-    });
-  }
+      return new repositoryServiceImpl();
+    }, useMock);
+  },
   
   /**
-   * Set the factory to mock mode
-   * @param {boolean} [enabled=true] - Whether to enable mock mode
+   * Get an instance of the schema service
+   * @param {boolean} [options.forceMock] - Force using mock service
+   * @param {boolean} [options.forceReal] - Force using real service
+   * @returns {Object} Schema service instance
    */
-  setMockMode(enabled = true) {
-    // Only clear services if mode changes
-    if (this.mockMode !== enabled) {
-      this.mockMode = enabled;
-      this.services.clear();
-    }
-  }
-  
-  /**
-   * Create a factory with mock services
-   * @returns {Object} Mock service factory providing the same interface
-   */
-  static createMockFactory() {
-    // For testing, return our dedicated mockServiceFactory directly
-    return mockServiceFactory;
-  }
-  
-  /**
-   * Reset the singleton instance
-   * Used for testing
-   */
-  static resetInstance() {
-    ServiceFactory.instance = null;
-  }
-}
+  getSchemaService: (options = {}) => {
+    const useMock = options.forceMock || (isMockEnabled() && !options.forceReal);
 
-// Default instance export for convenience
-export const serviceFactory = ServiceFactory.getInstance();
+    return getServiceInstance('schema', async () => {
+      if (useMock) {
+        if (!mockSchemaServiceImpl) {
+          mockSchemaServiceImpl = await lazyLoad(() => 
+            import('../mock/mockSchemaService')
+          );
+        }
+        return new mockSchemaServiceImpl();
+      } 
+      
+      if (!schemaServiceImpl) {
+        schemaServiceImpl = await lazyLoad(() => 
+          import('./schemaService')
+        );
+      }
+      return new schemaServiceImpl();
+    }, useMock);
+  },
+  
+  /**
+   * Get an instance of the format service
+   * @param {boolean} [options.forceMock] - Force using mock service
+   * @param {boolean} [options.forceReal] - Force using real service
+   * @returns {Object} Format service instance
+   */
+  getFormatService: (options = {}) => {
+    const useMock = options.forceMock || (isMockEnabled() && !options.forceReal);
 
-// Export class for testing or custom instantiation
-export default ServiceFactory;
+    return getServiceInstance('format', async () => {
+      if (useMock) {
+        if (!mockFormatServiceImpl) {
+          mockFormatServiceImpl = await lazyLoad(() => 
+            import('../mock/mockFormatService')
+          );
+        }
+        return new mockFormatServiceImpl();
+      } 
+      
+      if (!formatServiceImpl) {
+        formatServiceImpl = await lazyLoad(() => 
+          import('./formatService')
+        );
+      }
+      return new formatServiceImpl();
+    }, useMock);
+  },
+  
+  /**
+   * Get an instance of the authentication service
+   * @param {boolean} [options.forceMock] - Force using mock service
+   * @param {boolean} [options.forceReal] - Force using real service
+   * @returns {Object} Authentication service instance
+   */
+  getAuthService: (options = {}) => {
+    const useMock = options.forceMock || (isMockEnabled() && !options.forceReal);
+
+    return getServiceInstance('auth', async () => {
+      if (useMock) {
+        if (!mockAuthServiceImpl) {
+          mockAuthServiceImpl = await lazyLoad(() => 
+            import('../mock/mockAuthService')
+          );
+        }
+        return new mockAuthServiceImpl();
+      } 
+      
+      if (!authServiceImpl) {
+        authServiceImpl = await lazyLoad(() => 
+          import('./authService')
+        );
+      }
+      return new authServiceImpl();
+    }, useMock);
+  },
+  
+  /**
+   * Reset all service instances (useful for testing)
+   */
+  resetAll: () => {
+    serviceInstances.clear();
+  }
+};
+
+export default serviceFactory;

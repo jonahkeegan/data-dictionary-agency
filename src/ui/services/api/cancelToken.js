@@ -1,69 +1,130 @@
 /**
- * Request cancellation utilities for the Data Dictionary Agency frontend
- * Manages cancellation tokens for in-flight API requests
+ * Request Cancellation Utility
+ * 
+ * Provides utilities for creating and managing cancellation tokens
+ * for Axios requests, allowing safe cancellation of in-flight requests.
  */
+
 import axios from 'axios';
 
-/**
- * Map of pending requests by key
- * @type {Map}
- */
-const pendingRequests = new Map();
+// Store active cancellation tokens
+const activeTokens = new Map();
 
 /**
- * Create a cancellation token for a request
- * @param {string} requestKey - Unique key for the request
- * @returns {Object} CancelToken source object
+ * Create a cancellation token that can be used to abort requests
+ * @param {string} id - Unique identifier for the cancellation token
+ * @returns {Object} Object with token and cancel function
  */
-export const createCancelToken = (requestKey) => {
-  // Cancel any existing request with this key
-  cancelPendingRequest(requestKey);
+export const createCancelToken = (id) => {
+  // Cancel any existing token with the same ID
+  cancelPendingRequest(id);
   
-  // Create a new cancel token
+  // Create a new cancelation token
   const source = axios.CancelToken.source();
-  pendingRequests.set(requestKey, source);
   
-  return source;
+  // Store the token source
+  activeTokens.set(id, source);
+  
+  return {
+    token: source.token,
+    cancel: () => source.cancel(`Request ${id} was cancelled`)
+  };
 };
 
 /**
- * Cancel a pending request
- * @param {string} requestKey - Unique key for the request
+ * Cancel a pending request by ID
+ * @param {string} id - ID of the request to cancel
+ * @returns {boolean} True if a request was cancelled, false otherwise
  */
-export const cancelPendingRequest = (requestKey) => {
-  const source = pendingRequests.get(requestKey);
-  if (source) {
-    source.cancel(`Request ${requestKey} cancelled`);
-    pendingRequests.delete(requestKey);
+export const cancelPendingRequest = (id) => {
+  if (activeTokens.has(id)) {
+    const source = activeTokens.get(id);
+    source.cancel(`Request ${id} was cancelled`);
+    activeTokens.delete(id);
+    return true;
   }
+  return false;
 };
 
 /**
  * Cancel all pending requests
- * Useful when navigating away from a page or on app shutdown
+ * @param {string} [prefix] - Optional prefix to only cancel requests with IDs starting with this prefix
+ * @returns {number} Number of requests cancelled
  */
-export const cancelAllPendingRequests = () => {
-  pendingRequests.forEach((source, key) => {
-    source.cancel(`Request ${key} cancelled during cleanup`);
-  });
-  pendingRequests.clear();
+export const cancelAllPendingRequests = (prefix) => {
+  let count = 0;
+  
+  for (const [id, source] of activeTokens.entries()) {
+    if (!prefix || id.startsWith(prefix)) {
+      source.cancel(`Request ${id} was cancelled`);
+      activeTokens.delete(id);
+      count++;
+    }
+  }
+  
+  return count;
 };
 
 /**
- * Generate a request key from function name and parameters
- * @param {string} functionName - Name of the function making the request
- * @param {Array} args - Arguments passed to the function
- * @returns {string} Unique request key
+ * Check if a request cancellation was triggered by the cancellation token
+ * @param {Error} error - The error to check
+ * @returns {boolean} True if the error is a cancellation error
  */
-export const generateRequestKey = (functionName, args = []) => {
-  return `${functionName}_${JSON.stringify(args)}`;
-};
-
-/**
- * Check if an error was caused by request cancellation
- * @param {Object} error - Error object from axios
- * @returns {boolean} Whether the error was due to cancellation
- */
-export const isCancel = (error) => {
+export const isRequestCancelledError = (error) => {
   return axios.isCancel(error);
+};
+
+/**
+ * Get the count of active cancellation tokens
+ * @param {string} [prefix] - Optional prefix to filter tokens
+ * @returns {number} Count of active tokens
+ */
+export const getActiveTokensCount = (prefix) => {
+  if (prefix) {
+    let count = 0;
+    for (const id of activeTokens.keys()) {
+      if (id.startsWith(prefix)) {
+        count++;
+      }
+    }
+    return count;
+  }
+  return activeTokens.size;
+};
+
+/**
+ * Create a cancellation token for use in a component
+ * The token will automatically be cancelled when the component unmounts
+ * @param {string} id - Unique identifier for the cancellation token
+ * @param {Function} useEffectHook - React useEffect hook for cleanup
+ * @returns {Object} Object with token and cancel function
+ * 
+ * @example
+ * // In a React component:
+ * const { token } = useCancelToken('myDataFetch', useEffect);
+ * 
+ * useEffect(() => {
+ *   apiClient.get('/data', { cancelToken: token });
+ * }, [token]);
+ */
+export const useCancelToken = (id, useEffectHook) => {
+  const source = createCancelToken(id);
+  
+  // Set up automatic cleanup when component unmounts
+  useEffectHook(() => {
+    return () => {
+      cancelPendingRequest(id);
+    };
+  }, []); // Empty dependency array ensures this only runs on mount/unmount
+  
+  return source;
+};
+
+export default {
+  createCancelToken,
+  cancelPendingRequest,
+  cancelAllPendingRequests,
+  isRequestCancelledError,
+  getActiveTokensCount,
+  useCancelToken
 };

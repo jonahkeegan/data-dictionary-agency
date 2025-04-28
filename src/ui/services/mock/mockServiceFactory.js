@@ -1,148 +1,98 @@
 /**
- * Factory for creating mock service instances
- * Used for development and testing without a backend
+ * Mock Service Factory
+ * 
+ * Central factory for creating mock service instances.
+ * Provides consistent access to mock services with realistic behavior.
  */
-import { MockRepositoryService, MockSchemaService, MockFormatService, MockAuthService, delay } from './services';
-import mockRepositories from './data/repositories';
-import mockSchemas, { relationships as mockRelationships } from './data/schemas';
-import mockFormats, { supportedFormats } from './data/formats';
+
+import MockRepositoryService from './mockRepositoryService';
+import MockSchemaService from './mockSchemaService';
+import MockFormatService from './mockFormatService';
+import MockAuthService from './mockAuthService';
+
+// Service instance cache
+const serviceInstances = new Map();
 
 /**
- * Mock Service Factory for testing and offline development
- * Provides in-memory service implementations
+ * Get a service instance, creating it if it doesn't exist
+ * @param {string} serviceType - Type of service to get
+ * @param {Function} createFn - Function to create the service if needed
+ * @returns {Object} Service instance
  */
-class MockServiceFactory {
-  constructor() {
-    // Create service instances only when first requested
-    this.repositoryService = null;
-    this.schemaService = null;
-    this.formatService = null;
-    this.authService = null;
+const getServiceInstance = (serviceType, createFn) => {
+  if (!serviceInstances.has(serviceType)) {
+    serviceInstances.set(serviceType, createFn());
   }
   
+  return serviceInstances.get(serviceType);
+};
+
+/**
+ * Mock Service Factory - provides access to all mock API services
+ */
+export const mockServiceFactory = {
   /**
-   * Get repository service instance
-   * @returns {MockRepositoryService} Repository service
+   * Get a mock repository service instance
+   * @param {Object} [options] - Service options
+   * @returns {MockRepositoryService} Mock repository service
    */
-  getRepositoryService() {
-    if (!this.repositoryService) {
-      this.repositoryService = new MockRepositoryService();
-      // Initialize with mock data
-      this.repositoryService.repositories = [...mockRepositories];
-    }
-    return this.repositoryService;
-  }
+  getRepositoryService: (options = {}) => {
+    return getServiceInstance('repository', () => new MockRepositoryService(options));
+  },
   
   /**
-   * Get schema service instance
-   * @returns {MockSchemaService} Schema service
+   * Get a mock schema service instance
+   * @param {Object} [options] - Service options
+   * @returns {MockSchemaService} Mock schema service
    */
-  getSchemaService() {
-    if (!this.schemaService) {
-      this.schemaService = new MockSchemaService();
-      // Initialize with mock data
-      this.schemaService.schemas = [...mockSchemas];
-      this.schemaService.relationships = [...mockRelationships];
-    }
-    return this.schemaService;
-  }
+  getSchemaService: (options = {}) => {
+    return getServiceInstance('schema', () => new MockSchemaService(options));
+  },
   
   /**
-   * Get format service instance
-   * @returns {MockFormatService} Format service
+   * Get a mock format service instance
+   * @param {Object} [options] - Service options
+   * @returns {MockFormatService} Mock format service
    */
-  getFormatService() {
-    if (!this.formatService) {
-      this.formatService = new MockFormatService();
-      // Initialize with mock data
-      this.formatService.formats = [...mockFormats];
-    }
-    return this.formatService;
-  }
+  getFormatService: (options = {}) => {
+    return getServiceInstance('format', () => new MockFormatService(options));
+  },
   
   /**
-   * Get authentication service instance
-   * @returns {MockAuthService} Authentication service
+   * Get a mock auth service instance
+   * @param {Object} [options] - Service options
+   * @returns {MockAuthService} Mock auth service
    */
-  getAuthService() {
-    if (!this.authService) {
-      this.authService = new MockAuthService();
-    }
-    return this.authService;
-  }
+  getAuthService: (options = {}) => {
+    return getServiceInstance('auth', () => new MockAuthService(options));
+  },
   
   /**
    * Reset all service instances
-   * Useful for testing to recreate a clean state
    */
-  resetAll() {
-    this.repositoryService = null;
-    this.schemaService = null;
-    this.formatService = null;
-    this.authService = null;
-  }
+  resetAll: () => {
+    serviceInstances.clear();
+  },
   
   /**
-   * Reset a specific service by name
-   * @param {string} serviceName - Name of the service to reset (e.g. 'repository')
+   * Configure failure rates for mock services
+   * @param {Object} options - Configuration options
+   * @param {number} [options.failureRate=0] - Rate of random failures (0-1)
+   * @param {number} [options.minDelay=50] - Minimum response delay in ms
+   * @param {number} [options.maxDelay=300] - Maximum response delay in ms
    */
-  resetService(serviceName) {
-    switch (serviceName) {
-      case 'repository':
-        this.repositoryService = null;
-        break;
-      case 'schema':
-        this.schemaService = null;
-        break;
-      case 'format':
-        this.formatService = null;
-        break;
-      case 'auth':
-        this.authService = null;
-        break;
-      default:
-        console.warn(`Unknown service: ${serviceName}`);
-    }
-  }
-  
-  /**
-   * Simulate network latency for all service methods
-   * @param {number} minMs - Minimum latency in milliseconds
-   * @param {number} maxMs - Maximum latency in milliseconds
-   */
-  simulateNetworkLatency(minMs = 200, maxMs = 800) {
-    // Apply to all services
+  configure: (options = {}) => {
     const services = [
-      this.getRepositoryService(),
-      this.getSchemaService(),
-      this.getFormatService(),
-      this.getAuthService()
+      'repository', 'schema', 'format', 'auth'
     ];
     
-    services.forEach(service => {
-      // Get all methods from the service prototype
-      const methodNames = Object.getOwnPropertyNames(Object.getPrototypeOf(service))
-        .filter(name => 
-          typeof service[name] === 'function' && 
-          name !== 'constructor' && 
-          !name.startsWith('_')
-        );
-      
-      // Wrap each method with artificial delay
-      methodNames.forEach(methodName => {
-        const originalMethod = service[methodName];
-        service[methodName] = async function(...args) {
-          // Random delay between minMs and maxMs
-          const latency = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-          await delay(latency);
-          return originalMethod.apply(this, args);
-        };
-      });
+    services.forEach(serviceType => {
+      const service = serviceInstances.get(serviceType);
+      if (service && typeof service.configure === 'function') {
+        service.configure(options);
+      }
     });
   }
-}
-
-// Create singleton instance
-const mockServiceFactory = new MockServiceFactory();
+};
 
 export default mockServiceFactory;
