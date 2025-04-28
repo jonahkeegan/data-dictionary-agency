@@ -1,5 +1,5 @@
 # Decision Journal: Data Dictionary Agency (DDA)
-timestamp: 2025-04-23T18:34:00-07:00
+timestamp: 2025-04-27T21:30:00-07:00
 
 ## Active Decisions
 
@@ -260,6 +260,231 @@ sequenceDiagram
 - **Status**: Approved
 - **Date**: 2025-04-14
 - **Source**: Visualization engine planning
+
+### #UI_002: API Client Architecture
+- **Context**: Need to implement a robust system for frontend-backend communication with consistent patterns
+- **Options**:
+  - Direct API calls: Simple but lacks error handling and results in duplicated code
+  - Individual service classes: Better organization but potential inconsistency
+  - Centralized client with service layer: More complex setup, but better maintainability
+  - Third-party API clients: Dependency on external libraries and potential lock-in
+- **Decision**: Implement centralized API client architecture with Axios, services layer, and custom hooks
+- **Rationale**:
+  - Provides consistent error handling and request processing across all API calls
+  - Centralizes configuration and authentication management
+  - Enables request cancellation to prevent memory leaks and race conditions
+  - Supports automatic retry for transient failures
+  - Abstracts API complexity from UI components through custom hooks
+  - Facilitates testing with mock services for development
+- **Process Flow**:
+```mermaid
+sequenceDiagram
+    participant Component
+    participant CustomHook
+    participant Service
+    participant APIClient
+    participant Interceptors
+    participant MockService
+    participant Backend
+    
+    Component->>CustomHook: Request data
+    CustomHook->>CustomHook: Set loading state
+    
+    alt Development Environment
+        Service->>MockService: Make API request
+        MockService->>MockService: Generate mock data
+        MockService-->>Service: Return mock response
+    else Production Environment
+        Service->>APIClient: Make API request
+        APIClient->>Interceptors: Process request
+        Interceptors->>Interceptors: Add auth headers
+        Interceptors->>Backend: Send HTTP request
+        
+        alt Successful Response
+            Backend-->>Interceptors: Return response data
+            Interceptors->>Interceptors: Transform response
+            Interceptors-->>APIClient: Return processed data
+            APIClient-->>Service: Return API response
+        else Failed Response
+            Backend-->>Interceptors: Return error
+            Interceptors->>Interceptors: Transform error
+            
+            alt Retryable Error
+                Interceptors->>APIClient: Signal for retry
+                APIClient->>Backend: Retry request
+                Backend-->>APIClient: Return response
+                APIClient-->>Service: Return retry response
+            else Non-retryable Error
+                Interceptors-->>APIClient: Return standardized error
+                APIClient-->>Service: Throw error
+                Service-->>CustomHook: Propagate error
+                CustomHook->>CustomHook: Set error state
+            end
+        end
+    end
+    
+    alt Successful Path
+        Service-->>CustomHook: Return data
+        CustomHook->>CustomHook: Set data state
+        CustomHook->>CustomHook: Clear loading state
+        CustomHook-->>Component: Return {data, loading, error}
+        Component->>Component: Render with data
+    else Error Path
+        CustomHook-->>Component: Return {data: null, loading: false, error}
+        Component->>Component: Render error state
+    end
+    
+    alt Component Unmount
+        Component->>CustomHook: Unmount notification
+        CustomHook->>Service: Cancel pending requests
+        Service->>APIClient: Cancel request
+        APIClient->>Backend: Abort request
+    end
+```
+  - This diagram illustrates the complete API client architecture flow from component to backend and back. The sequence shows how a component uses a custom hook to access a service, which then communicates with the backend through the centralized API client. The diagram highlights key features like request/response interceptors for header management and data transformation, environment-based switching between real and mock services, automatic retry for transient errors, standardized error handling, and request cancellation on component unmount. This architecture provides a robust foundation for all frontend-backend communication in the application.
+- **Components**: #UI_API_CLIENT, #UI_REPO_SERVICE, #UI_SCHEMA_SERVICE, #UI_FORMAT_SERVICE, #UI_API_HOOK
+- **Status**: Approved
+- **Date**: 2025-04-27
+- **Source**: API Client Architecture implementation (SUBTASK_002.2.1)
+
+### #UI_003: Advanced Caching System
+- **Context**: Need to optimize frontend performance, reduce network load, and improve user experience
+- **Options**:
+  - No caching: Simple implementation but poor performance
+  - Browser-level caching: Limited control and granularity
+  - Basic in-memory caching: Better control but limited invalidation capability
+  - Advanced caching with TTL and pattern-based invalidation: More complex but comprehensive
+  - Service worker caching: Good for offline support but complex implementation
+- **Decision**: Implement advanced caching system with TTL and pattern-based invalidation
+- **Rationale**:
+  - Significantly reduces API calls for frequently accessed data
+  - Configurable TTL values allow data freshness control
+  - Pattern-based invalidation ensures related cache entries are cleared together
+  - Improves perceived performance and reduces server load
+  - Handles edge cases like update operations and stale data appropriately
+- **Process Flow**:
+```mermaid
+sequenceDiagram
+    participant Component
+    participant Service
+    participant CacheManager
+    participant Backend
+    
+    Component->>Service: Request data
+    Service->>CacheManager: Check cache
+    
+    alt Cache hit
+        CacheManager->>CacheManager: Validate TTL
+        
+        alt Cache valid
+            CacheManager-->>Service: Return cached data
+            Service-->>Component: Return data (from cache)
+        else Cache expired
+            CacheManager->>CacheManager: Remove expired entry
+            CacheManager-->>Service: Cache miss
+            Service->>Backend: Fetch fresh data
+            Backend-->>Service: Return fresh data
+            Service->>CacheManager: Update cache with new TTL
+            CacheManager-->>Service: Confirm cache update
+            Service-->>Component: Return fresh data
+        end
+        
+    else Cache miss
+        CacheManager-->>Service: Cache miss
+        Service->>Backend: Fetch data from API
+        Backend-->>Service: Return data
+        Service->>CacheManager: Store in cache with TTL
+        CacheManager-->>Service: Confirm cache storage
+        Service-->>Component: Return fresh data
+    end
+    
+    alt Write operation occurs
+        Component->>Service: Update/create/delete data
+        Service->>Backend: Send write operation
+        Backend-->>Service: Confirm operation
+        Service->>CacheManager: Invalidate related cache entries
+        
+        loop For each matching pattern
+            CacheManager->>CacheManager: Find matching cache keys
+            CacheManager->>CacheManager: Remove matching entries
+        end
+        
+        CacheManager-->>Service: Confirm invalidation
+        Service-->>Component: Return operation result
+    end
+```
+  - This diagram illustrates the advanced caching system with TTL-based expiration and pattern-based invalidation. When a component requests data, the service first checks the cache manager. On a cache hit, the TTL is validated to ensure the data is still fresh. If valid, the cached data is returned without an API call; if expired, fresh data is fetched from the backend and the cache is updated. On a cache miss, data is fetched from the API and stored in the cache with a TTL. The diagram also shows how write operations trigger pattern-based invalidation, where all related cache entries matching specific patterns are identified and removed. This ensures that after data modifications, subsequent reads will fetch fresh data rather than serving stale cached values.
+- **Components**: #UI_API_CLIENT, #UI_CACHE
+- **Status**: Approved
+- **Date**: 2025-04-27
+- **Source**: Service Layer implementation (SUBTASK_002.2)
+
+### #UI_004: Mock Service Architecture
+- **Context**: Need a reliable development and testing environment that works without backend connectivity
+- **Options**:
+  - Hardcoded mock data: Simple but not flexible
+  - Individual mock implementations: Lacks consistency across services
+  - Centralized mock service layer: More setup but better maintainability
+  - Third-party mocking libraries: External dependency and potential integration issues
+- **Decision**: Implement a centralized mock service layer with realistic test data and configurable behaviors
+- **Rationale**:
+  - Enables offline development without backend dependency
+  - Provides consistent mocking strategy across all services
+  - Offers configurable behaviors like network delays and error scenarios
+  - Facilitates testing of edge cases and error handling
+  - Simplifies automated testing
+- **Process Flow**:
+```mermaid
+sequenceDiagram
+    participant Component
+    participant ServiceFactory
+    participant MockServiceFactory
+    participant MockService
+    participant DataStore
+    participant NetworkSimulator
+    
+    Component->>ServiceFactory: Get service
+    
+    alt Mock mode enabled
+        ServiceFactory->>MockServiceFactory: Get mock service
+        MockServiceFactory->>MockService: Create/return mock service
+        MockService->>DataStore: Initialize with mock data
+        DataStore-->>MockService: Return initialized mock data
+        MockServiceFactory-->>ServiceFactory: Return mock service
+    else Production mode
+        ServiceFactory->>ServiceFactory: Get real service
+    end
+    
+    ServiceFactory-->>Component: Return appropriate service
+    Component->>MockService: Make API request
+    
+    alt Success scenario
+        MockService->>NetworkSimulator: Simulate network delay
+        NetworkSimulator-->>MockService: Delay complete
+        MockService->>DataStore: Get mock data
+        DataStore-->>MockService: Return mock data
+        MockService-->>Component: Return mocked response
+    else Error scenario
+        MockService->>NetworkSimulator: Simulate network delay
+        NetworkSimulator-->>MockService: Delay complete
+        MockService->>MockService: Generate error
+        MockService-->>Component: Return error response
+    end
+    
+    alt Data modification request
+        Component->>MockService: Create/update/delete
+        MockService->>NetworkSimulator: Simulate network delay
+        NetworkSimulator-->>MockService: Delay complete
+        MockService->>DataStore: Modify mock data store
+        DataStore-->>MockService: Confirm modification
+        MockService-->>Component: Return success response
+    end
+```
+  - This diagram illustrates the mock service architecture designed for development and testing environments. When a component requests a service, the ServiceFactory determines whether to return a real or mock service based on the current mode. In mock mode, the MockServiceFactory creates specialized mock services that interact with a DataStore containing realistic test data. The diagram shows how mock services simulate realistic API behavior, including configurable network delays and both success and error scenarios. This architecture enables development and testing to proceed without a backend dependency while maintaining a consistent interface with the real services. It also facilitates testing of edge cases and error handling by allowing precise control over the mock responses.
+- **Components**: #UI_MOCK_SERVICE, #UI_SERVICE_FACTORY
+- **Status**: Approved
+- **Date**: 2025-04-27
+- **Source**: Service Layer implementation (SUBTASK_002.2)
 
 ### #FD_001: Confidence-Based Type Inference System
 - **Context**: Need accurate type detection across multiple data formats with varying type systems
