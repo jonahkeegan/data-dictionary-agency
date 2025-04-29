@@ -1,52 +1,30 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to the Data Dictionary Agency project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+## [0.2.0] - 2025-04-29
 
 ### Added
+- Completed SUBTASK_002.2.7: Unit Testing Redux Integration
+  - Implemented comprehensive unit tests for all Redux slices:
+    - schemasSlice: Tests for actions, thunks, selectors, reducers
+    - repositoriesSlice: Tests for repository CRUD operations
+    - formatsSlice: Tests for format operations and validation
+    - authSlice: Tests for authentication flows and token management
+    - uiSlice: Tests for UI state management
+  - Used configureMockStore to test Redux actions and state changes
+  - Implemented mocking strategy for async thunks to isolate Redux logic
+  - Added tests for success and failure scenarios
+  - Tested all selectors and state transformations
+  - Achieved 92 passing tests across all Redux slice files
 
-- Implemented API Client Architecture with Axios
-  - Added environment-specific configuration management
-  - Created centralized API client factory
-  - Implemented request/response interceptors
-  - Added standardized error handling
-  - Integrated request cancellation support
-  - Added automatic retry mechanism for transient failures
+## [0.1.0] - 2025-04-28
 
-- Implemented advanced API client capabilities
-  - Added circuit breaker pattern for resilience against API failures
-  - Created sophisticated caching system with TTL and pattern-based invalidation
-  - Added in-flight request deduplication
-  - Implemented token refresh handling for authentication
-
-- Created comprehensive service layer
-  - Implemented BaseService abstract class with common functionality
-  - Created RepositoryService for repository-related operations
-  - Created SchemaService for schema-related operations
-  - Created FormatService for format detection and conversion
-  - Implemented AuthService for authentication and user management
-  - Created ServiceFactory for centralized service instance management
-
-- Developed mock services for development/testing
-  - Created MockRepositoryService with realistic repository data
-  - Created MockSchemaService with realistic schema data
-  - Created MockFormatService with format detection and conversion
-  - Implemented MockAuthService with simulated authentication
-  - Added centralized mock data and utilities
-  - Created MockServiceFactory for mock service management
-  - Added controllable network conditions (delay, failure rate)
-
-### Changed
-
-- Updated service layer architecture documentation
-- Enhanced error handling with standardized error formats
-- Improved type definitions for API responses
-
-### Fixed
-
-- Fixed authentication token handling in API client
-- Added proper cleanup for in-flight requests on component unmount
+### Added
+- Completed SUBTASK_002.1: Implement Web UI Framework
+- Completed SUBTASK_002.2.1: API Client Architecture and Configuration
+- Completed SUBTASK_002.2.2: Service Layer Design and Interface Definition
+- Completed SUBTASK_002.2.3: API Client and Service Implementation 
+- Completed SUBTASK_002.2.4: Redux Integration and Thunks
+- Completed SUBTASK_002.2.5: Hook Abstractions and Component Integration
+- Completed SUBTASK_002.2.6: Unit Testing API Client and Services
