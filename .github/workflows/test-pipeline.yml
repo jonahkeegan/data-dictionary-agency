@@ -1,0 +1,206 @@
+name: Test Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        partition: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+        cache: 'npm'
+    
+    - name: Install PowerShell modules
+      shell: pwsh
+      run: |
+        Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~\AppData\Local\pip\Cache
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Cache Node.js dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~\AppData\Roaming\npm-cache
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      if: hashFiles('requirements.txt') != ''
+    
+    - name: Install Node.js dependencies
+      run: |
+        npm ci
+      if: hashFiles('package-lock.json') != ''
+    
+    - name: Run Tests
+      id: run_tests
+      shell: pwsh
+      run: |
+        ./tests/RunTests.ps1 -CI -Parallel -Partition ${{ matrix.partition }} -TotalPartitions 10 -ExportJUnit -ExportHtml
+    
+    - name: Upload JUnit Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: junit-reports-${{ matrix.partition }}
+        path: test-reports/junit/*.xml
+        if-no-files-found: warn
+      if: always()
+    
+    - name: Upload HTML Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: html-reports-${{ matrix.partition }}
+        path: test-reports/html/*.html
+        if-no-files-found: warn
+      if: always()
+
+  report:
+    needs: test
+    runs-on: windows-latest
+    if: always()
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download all test results
+      uses: actions/download-artifact@v3
+      with:
+        path: ./test-reports-all
+    
+    - name: Merge Test Reports
+      shell: pwsh
+      id: merge_reports
+      run: |
+        # Create output directories
+        New-Item -Path "./test-reports" -ItemType Directory -Force | Out-Null
+        New-Item -Path "./test-reports/junit" -ItemType Directory -Force | Out-Null
+        New-Item -Path "./test-reports/html" -ItemType Directory -Force | Out-Null
+        
+        # Copy all JUnit files to a single directory
+        Copy-Item -Path "./test-reports-all/junit-reports-*/*.xml" -Destination "./test-reports/junit/" -Force
+        
+        # Create summary information
+        $xmlFiles = Get-ChildItem -Path "./test-reports/junit" -Filter "*.xml"
+        Write-Host "Found $($xmlFiles.Count) XML report files"
+        
+        $totalTests = 0
+        $passedTests = 0
+        $failedTests = 0
+        $skippedTests = 0
+        
+        foreach ($file in $xmlFiles) {
+          $xml = [xml](Get-Content $file.FullName)
+          $suite = $xml.SelectSingleNode("//testsuite")
+          if ($suite) {
+            $totalTests += [int]$suite.tests
+            $failedTests += [int]$suite.failures
+            $skippedTests += [int]$suite.skipped
+          }
+        }
+        
+        $passedTests = $totalTests - $failedTests - $skippedTests
+        $overallStatus = if ($failedTests -eq 0) { "PASS" } else { "FAIL" }
+        
+        # Create HTML summary report
+        $htmlContent = @"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Test Results Summary</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .summary { display: flex; justify-content: space-around; margin-bottom: 20px; }
+                .summary-box { padding: 15px; border-radius: 5px; text-align: center; min-width: 150px; }
+                .pass { background-color: #d4edda; color: #155724; }
+                .fail { background-color: #f8d7da; color: #721c24; }
+                .skip { background-color: #fff3cd; color: #856404; }
+                .total { background-color: #e9ecef; color: #495057; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Test Results Summary</h1>
+                <p>Generated on $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")</p>
+            </div>
+            
+            <div class="summary">
+                <div class="summary-box total">
+                    <h2>Total Tests</h2>
+                    <p>$totalTests</p>
+                </div>
+                <div class="summary-box pass">
+                    <h2>Passed</h2>
+                    <p>$passedTests</p>
+                </div>
+                <div class="summary-box fail">
+                    <h2>Failed</h2>
+                    <p>$failedTests</p>
+                </div>
+                <div class="summary-box skip">
+                    <h2>Skipped</h2>
+                    <p>$skippedTests</p>
+                </div>
+            </div>
+            
+            <h2>Overall Status: $overallStatus</h2>
+        </body>
+        </html>
+        "@
+        
+        $htmlContent | Set-Content -Path "./test-reports/summary.html" -Encoding UTF8
+        
+        # Output stats as GitHub Actions outputs
+        "test_total=$totalTests" >> $env:GITHUB_OUTPUT
+        "test_passed=$passedTests" >> $env:GITHUB_OUTPUT
+        "test_failed=$failedTests" >> $env:GITHUB_OUTPUT
+        "test_skipped=$skippedTests" >> $env:GITHUB_OUTPUT
+        "test_status=$overallStatus" >> $env:GITHUB_OUTPUT
+    
+    - name: Create Status Badge
+      uses: emibcn/badge-action@v1
+      with:
+        label: 'tests'
+        status: '${{ steps.merge_reports.outputs.test_passed }}/${{ steps.merge_reports.outputs.test_total }} (${{ steps.merge_reports.outputs.test_status }})'
+        color: ${{ steps.merge_reports.outputs.test_status == 'PASS' && 'green' || 'red' }}
+        path: ./test-reports/test-status.svg
+    
+    - name: Upload Merged Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-reports-merged
+        path: ./test-reports
+    
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always()
+      with:
+        files: ./test-reports/junit/*.xml
